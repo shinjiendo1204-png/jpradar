@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/react";
+import SupportChat from "@/components/SupportChat";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${geist.variable} font-sans antialiased`}>
         {children}
         <Analytics />
+        <SupportChat />
       </body>
     </html>
   );

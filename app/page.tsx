@@ -280,8 +280,35 @@ export default function HomePage() {
       </section>
 
       {/* FOOTER */}
-      <footer className="border-t border-slate-200 py-8 px-6 text-center text-slate-400 text-sm">
-        <p>© 2026 JPRADAR by <a href="https://wakaruai.net" className="hover:text-slate-600 transition-colors">WAKARUAI</a></p>
+      <footer className="border-t border-slate-200 py-10 px-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex flex-col md:flex-row justify-between items-start gap-6 mb-8">
+            <div>
+              <div className="font-black text-lg text-slate-900 mb-1">JP<span className="text-blue-600">RADAR</span></div>
+              <p className="text-slate-400 text-xs max-w-xs">AI-powered Japan social intelligence for global marketers. Publicly available data only.</p>
+            </div>
+            <div className="flex gap-8 text-sm">
+              <div>
+                <div className="font-bold text-slate-500 text-xs uppercase tracking-widest mb-2">Product</div>
+                <ul className="space-y-1">
+                  <li><a href="#signup" className="text-slate-400 hover:text-slate-700 transition-colors">Beta signup</a></li>
+                  <li><a href="/auth/login" className="text-slate-400 hover:text-slate-700 transition-colors">Login</a></li>
+                  <li><a href="/dashboard" className="text-slate-400 hover:text-slate-700 transition-colors">Dashboard</a></li>
+                </ul>
+              </div>
+              <div>
+                <div className="font-bold text-slate-500 text-xs uppercase tracking-widest mb-2">Legal</div>
+                <ul className="space-y-1">
+                  <li><a href="/legal/terms" className="text-slate-400 hover:text-slate-700 transition-colors">Terms of Service</a></li>
+                  <li><a href="/legal/privacy" className="text-slate-400 hover:text-slate-700 transition-colors">Privacy Policy</a></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div className="border-t border-slate-100 pt-6">
+            <p className="text-slate-400 text-xs text-center">© 2026 JPRADAR by <a href="https://wakaruai.net" className="hover:text-slate-600">WAKARUAI</a> · Reports are AI-generated summaries of publicly available information and are provided for informational purposes only. Not financial or business advice. · <a href="/legal/terms" className="hover:text-slate-600">Terms</a> · <a href="/legal/privacy" className="hover:text-slate-600">Privacy</a></p>
+          </div>
+        </div>
       </footer>
     </div>
   );

@@ -55,7 +55,7 @@ interface EbaySoldItem {
 async function getEbaySoldItems(query: string, minPrice: number): Promise<EbaySoldItem[]> {
   const url = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1&LH_Complete=1&_ipg=20&_sop=13`;
   let html: string;
-  try { html = await fetchHtml(url, false, 'us'); } catch { return []; }
+  try { html = await fetchHtml(url, true, 'us'); } catch { return []; }
 
   const items: EbaySoldItem[] = [];
   let m: RegExpExecArray | null;

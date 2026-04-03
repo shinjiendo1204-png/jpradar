@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
 
   const params = new URLSearchParams({
     api_key: sbKey!, url,
-    render_js: 'false', premium_proxy: 'false', country_code: 'us',
+    render_js: 'true', premium_proxy: 'true', country_code: 'us',
   });
   const res = await fetch(`https://app.scrapingbee.com/api/v1/?${params}`);
   const html = await res.text();

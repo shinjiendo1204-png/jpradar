@@ -42,7 +42,7 @@ export async function GET() {
     if (!gamesRes.ok) throw new Error('Twitch games failed');
     const gamesData = await gamesRes.json();
 
-    // Get JP streams for each top game to find JP-relevant ones
+    // Get JP streams only (language=ja)
     const jpStreams = await fetch(
       `https://api.twitch.tv/helix/streams?first=100&language=ja`,
       { headers }

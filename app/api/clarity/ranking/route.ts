@@ -79,12 +79,8 @@ export async function GET(req: NextRequest) {
     // Total concurrent viewers (for attribution calculation)
     const totalConcurrentViewers = liveStreams.reduce((s, st) => s + st.viewer_count, 0);
 
-    // JP streamers first; if fewer than 3 JP, include all but sort JP to top
-    const jpStreams = liveStreams.filter(s => s.language === 'ja');
-    const nonJpStreams = liveStreams.filter(s => s.language !== 'ja');
-    const streamsToRank = jpStreams.length >= 3
-      ? jpStreams
-      : [...jpStreams, ...nonJpStreams]; // JP first
+    // JP ONLY: language='ja' streamers only
+    const streamsToRank = liveStreams.filter(s => s.language === 'ja');
 
     // Build streamer ranking with attribution
     const streamersWithAttribution = await Promise.all(

@@ -15,7 +15,7 @@ export interface VFunctionInput {
   category_percentile?: number;      // 0-100: where this streamer ranks in category
   review_delta_per_stream: number;   // attributed reviews (48h window)
   engagement_rate?: number;          // interactions / viewers (e.g. 0.02 = 2%)
-  genre_broadcast_ratio?: number;    // 0-1: fraction of streams in same genre
+  genre_broadcast_ratio?: number;    // kept for compat but not used in scoring
   peak_hour_bonus?: number;
 }
 
@@ -25,10 +25,10 @@ export interface VFunctionOutput {
   cbi_index: number;
   interpretation: string;
   components: {
-    reach_efficiency: number;   // 0-25
-    conversion: number;         // 0-40
+    reach_efficiency: number;   // 0-30
+    conversion: number;         // 0-45
     engagement: number;         // 0-25
-    fit: number;                // 0-10
+    fit: number;                // kept for compat, always 0 now
   };
   estimated_purchases_per_stream: { low: number; mid: number; high: number };
 }
@@ -80,12 +80,11 @@ export function calcVFunction(input: VFunctionInput): VFunctionOutput {
     engScore = Math.min(Math.log10(estimated * 100 + 1) * 12, 25);
   }
 
-  // 4. Genre Fit (0-10)
-  const fitScore = genre_broadcast_ratio !== undefined
-    ? Math.min(genre_broadcast_ratio * 10, 10)
-    : 3; // neutral default
+  // Genre Fit removed — replaced by per-game performance section in UI
+  // Redistribute 10pts to Conversion (max now 45) and Reach (max 30)
+  const conversionScoreFinal = Math.min(conversionScore * 1.1, 45);
 
-  const rawScore = (reachEfficiency + conversionScore + engScore + fitScore) * peak_hour_bonus;
+  const rawScore = (reachEfficiency + conversionScoreFinal + engScore) * peak_hour_bonus;
   const v_score = Math.max(0, Math.min(Math.round(rawScore), 100));
 
   // Tier
@@ -122,9 +121,9 @@ export function calcVFunction(input: VFunctionInput): VFunctionOutput {
     interpretation,
     components: {
       reach_efficiency: Math.round(reachEfficiency * 10) / 10,
-      conversion: Math.round(conversionScore * 10) / 10,
+      conversion: Math.round(conversionScoreFinal * 10) / 10,
       engagement: Math.round(engScore * 10) / 10,
-      fit: Math.round(fitScore * 10) / 10,
+      fit: 0,
     },
     estimated_purchases_per_stream: {
       low: Math.max(0, Math.round(midPurchases * 0.5)),

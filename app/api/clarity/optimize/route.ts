@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTwitchGameId, getTopJPStreamersForGame, getStreamerInfo, getPastBroadcasts } from '@/lib/twitch';
 import { getSteamAppInfo } from '@/lib/steam';
-import { calcVFunction, optimizeBudget, StreamerForOptimizer } from '@/lib/vfunction';
+import { calcVFunction, assignPercentiles, optimizeBudget, StreamerForOptimizer } from '@/lib/vfunction';
 
 /**
  * Budget Optimizer
@@ -66,14 +66,13 @@ export async function POST(req: NextRequest) {
 
     const liveStreams = await getTopJPStreamersForGame(twitchGameId, 30);
 
-    // Calculate category average viewers
-    const categoryAvgViews = liveStreams.length > 0
-      ? liveStreams.reduce((s, st) => s + st.viewer_count, 0) / liveStreams.length
-      : 5000;
+    // Pre-compute percentile ranks from live viewer counts
+    const allViewerCounts = liveStreams.map(s => s.viewer_count);
+    const percentiles = assignPercentiles(allViewerCounts);
 
     // Build V-Function scores for each streamer
     const streamersWithScores: StreamerForOptimizer[] = await Promise.all(
-      liveStreams.slice(0, 15).map(async (stream) => {
+      liveStreams.slice(0, 15).map(async (stream, idx) => {
         const streamerInfo = await getStreamerInfo(stream.user_name).catch(() => null);
         const broadcasts = streamerInfo
           ? await getPastBroadcasts(streamerInfo.id, 15).catch(() => [])
@@ -116,7 +115,7 @@ export async function POST(req: NextRequest) {
 
         const vResult = calcVFunction({
           avg_view_count: avgViews,
-          avg_category_views: categoryAvgViews,
+          category_percentile: percentiles[idx] ?? 50,
           review_delta_per_stream: reviewDeltaPerStream,
           engagement_rate: engagementRate,
           genre_broadcast_ratio: genreBroadcastRatio,

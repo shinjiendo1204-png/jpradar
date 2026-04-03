@@ -121,19 +121,33 @@ export default function StreamerPage() {
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-black">{data.streamer.display_name}</h1>
             <p className="text-slate-400 text-sm mb-3 truncate">{data.streamer.description?.slice(0, 100)}</p>
-            <div className="flex flex-wrap gap-3">
-              <span className="text-xs bg-slate-100 px-2 py-1 rounded-full font-medium">
-                {data.streamer.total_views.toLocaleString()} total views
-              </span>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {(data.streamer as any).detected_genres?.map((g: string) => (
+                <span key={g} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium">{g}</span>
+              ))}
               {data.streamer.broadcaster_type && (
                 <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-medium capitalize">
-                  {data.streamer.broadcaster_type || 'regular'}
+                  {data.streamer.broadcaster_type}
                 </span>
               )}
               <a href={data.streamer.twitch_url} target="_blank" rel="noopener noreferrer"
                 className="text-xs bg-purple-600 text-white px-2 py-1 rounded-full font-medium flex items-center gap-1 hover:bg-purple-700">
                 Twitch <ExternalLink size={10} />
               </a>
+            </div>
+            {/* Key stats */}
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: 'Avg Viewers', value: (data.streamer as any).avg_view_count?.toLocaleString() || '—' },
+                { label: 'Peak Viewers', value: (data.streamer as any).peak_view_count?.toLocaleString() || '—' },
+                { label: 'Streams/Week', value: (data.streamer as any).streams_per_week || '—' },
+                { label: 'Total Hours', value: (data.streamer as any).total_broadcast_hours || '—' },
+              ].map((s, i) => (
+                <div key={i} className="bg-slate-50 rounded-lg p-2 text-center">
+                  <div className="font-black text-sm">{s.value}</div>
+                  <div className="text-slate-400 text-xs">{s.label}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

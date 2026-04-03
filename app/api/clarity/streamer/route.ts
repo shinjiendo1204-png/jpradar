@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStreamerInfo, getPastBroadcasts } from '@/lib/twitch';
-import { calcVFunction, calcCBIFromComments } from '@/lib/vfunction';
+import { calcVFunction } from '@/lib/vfunction';
 
 /**
  * J-Clarity Streamer Analysis
@@ -130,6 +130,31 @@ export async function GET(req: NextRequest) {
     const avgViewCount = broadcasts.length > 0
       ? Math.round(broadcasts.reduce((s, b) => s + b.view_count, 0) / broadcasts.length)
       : 0;
+    const peakViewCount = broadcasts.length > 0
+      ? Math.max(...broadcasts.map(b => b.view_count))
+      : 0;
+    const totalBroadcastHours = Math.round(
+      broadcasts.reduce((s, b) => s + parseDurationToMinutes(b.duration), 0) / 60
+    );
+    const streamsPerWeek = broadcasts.length > 0 ? (
+      broadcasts.length / Math.max(
+        (new Date().getTime() - new Date(broadcasts[broadcasts.length - 1].created_at).getTime()) / (7 * 24 * 3600000),
+        1
+      )
+    ).toFixed(1) : '0';
+
+    // Top game categories from recent broadcasts
+    const gameTitles = broadcasts.map(b => b.title).slice(0, 10);
+    const GENRE_MAP: Record<string, string[]> = {
+      'FPS': ['counter-strike', 'valorant', 'overwatch', 'apex', 'call of duty'],
+      'Survival': ['valheim', 'rust', 'ark', 'dayz'],
+      'RPG': ['final fantasy', 'dragon quest', 'elden ring', 'persona'],
+      'Battle Royale': ['pubg', 'fortnite', 'warzone'],
+      'Horror': ['resident evil', 'silent hill', 'phasmophobia'],
+    };
+    const detectedGenres = Object.entries(GENRE_MAP)
+      .filter(([, kws]) => kws.some(k => gameTitles.join(' ').toLowerCase().includes(k)))
+      .map(([g]) => g);
 
     // Genre fit ratio: fraction of broadcasts with this game/genre
     const gameNameLower = gameName.toLowerCase();
@@ -140,19 +165,18 @@ export async function GET(req: NextRequest) {
     const genreBroadcastRatio = broadcasts.length > 0 ? relevantCount / broadcasts.length : 0;
     const genreFitScore = genreBroadcastRatio;
 
-    // Clips per broadcast (engagement proxy — estimate from view count)
-    const clipsPerBroadcast = avgViewCount > 10000 ? 3 : avgViewCount > 2000 ? 1 : 0.3;
-
     // Review delta per stream (from correlation data)
     const impactBroadcasts = broadcastsWithImpact.filter(b => b.review_delta_24h > 0);
     const avgReviewDelta = impactBroadcasts.length > 0
       ? impactBroadcasts.reduce((s, b) => s + b.review_delta_24h, 0) / impactBroadcasts.length
-      : 0.1;
-
-    // V-Function
-    const engagementRate = avgViewCount > 0
-      ? Math.min(clipsPerBroadcast / (avgViewCount / 1000), 1)
       : 0;
+
+    // Engagement rate: size-based estimate (v4: rate-based)
+    const engagementRate = avgViewCount < 500 ? 0.08
+      : avgViewCount < 2000 ? 0.04
+      : avgViewCount < 10000 ? 0.02
+      : avgViewCount < 50000 ? 0.012
+      : 0.007;
 
     const vResult = calcVFunction({
       avg_view_count: avgViewCount,
@@ -191,6 +215,13 @@ export async function GET(req: NextRequest) {
         total_views: streamer.view_count,
         broadcaster_type: streamer.broadcaster_type,
         twitch_url: `https://www.twitch.tv/${streamer.login}`,
+        // Stats
+        avg_view_count: avgViewCount,
+        peak_view_count: peakViewCount,
+        total_broadcast_hours: totalBroadcastHours,
+        streams_per_week: streamsPerWeek,
+        detected_genres: detectedGenres,
+        broadcasts_analyzed: broadcasts.length,
       },
       // V-Function score
       v_function: {

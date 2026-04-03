@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
   // Show first item_detail block raw
   const blocks = html.split('<div class="item_detail">');
-  const firstBlock = blocks[1]?.slice(0, 800) || 'NOT FOUND';
+  const firstBlock = blocks[1]?.slice(0, 1500) || 'NOT FOUND';
 
   return NextResponse.json({
     status: res.status,

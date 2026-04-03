@@ -45,8 +45,8 @@ function extractProducts(html: string, keyword: string): SurugayaProduct[] {
     const path = linkMatch[1];
     const id = linkMatch[2];
 
-    // Title from <div class="title"><a ...>TITLE</a>
-    const titleMatch = block.match(/<div class="title">\s*<a[^>]+>([^<]+)<\/a>/);
+    // Title from <h3 class="product-name">TITLE</h3>
+    const titleMatch = block.match(/<h3[^>]*class="product-name"[^>]*>\s*([^<]+?)\s*<\/h3>/);
     const title = titleMatch ? decodeHtml(titleMatch[1].trim()) : `商品ID:${id}`;
 
     // Price: remove retail (teika) and crossed-out (strike) prices first, then find ¥XXX

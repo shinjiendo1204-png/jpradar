@@ -46,14 +46,21 @@ function ScoreRing({ score }: { score: number }) {
 }
 
 // Simple bar chart for streamer contribution
-function StreamerChart({ streamers }: { streamers: AnalysisResult['twitch']['top_streamers'] }) {
+function StreamerChart({ streamers, steamId = '', gameName = '' }: {
+  streamers: AnalysisResult['twitch']['top_streamers'];
+  steamId?: string;
+  gameName?: string;
+}) {
   if (!streamers.length) return null;
   const max = Math.max(...streamers.map(s => s.viewers), 1);
   return (
     <div className="space-y-3">
       {streamers.map((s, i) => (
         <div key={i} className="flex items-center gap-3">
-          <div className="w-24 text-xs font-bold text-slate-700 truncate shrink-0">{s.name}</div>
+          <Link
+            href={`/clarity/streamer/${s.name}?steam_id=${steamId}&game_name=${encodeURIComponent(gameName)}`}
+            className="w-28 text-xs font-bold text-purple-600 hover:text-purple-800 truncate shrink-0 hover:underline"
+          >{s.name}</Link>
           <div className="flex-1 bg-slate-100 rounded-full h-6 relative overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
@@ -80,10 +87,12 @@ export default function ClarityPage() {
   const [searchResults, setSearchResults] = useState<GameSearchResult[]>([]);
   const [selectedGame, setSelectedGame] = useState<GameSearchResult | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [ranking, setRanking] = useState<any>(null);
   const [translations, setTranslations] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState<'overview' | 'ranking'>('overview');
   const searchRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<any>(null);
 
@@ -111,12 +120,18 @@ export default function ClarityPage() {
     setError("");
     setResult(null);
     setTranslations([]);
+    setRanking(null);
+    setActiveTab('overview');
 
     try {
       const res = await fetch(`/api/clarity/analyze?steam_id=${game.app_id}&game_name=${encodeURIComponent(game.name)}`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setResult(data);
+
+      // Load ranking in parallel
+      fetch(`/api/clarity/ranking?steam_id=${game.app_id}&game_name=${encodeURIComponent(game.name)}`)
+        .then(r => r.json()).then(setRanking).catch(() => {});
 
       // Translate reviews
       const jaTexts = data.recent_reviews.map((r: any) => r.text_ja);
@@ -211,6 +226,21 @@ export default function ClarityPage() {
         {result && !loading && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
 
+            {/* Tabs */}
+            <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+              {(['overview', 'ranking'] as const).map(tab => (
+                <button key={tab} onClick={() => setActiveTab(tab)}
+                  className={`px-5 py-2 rounded-lg text-sm font-bold transition-colors capitalize ${
+                    activeTab === tab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}>
+                  {tab === 'overview' ? '📊 Overview' : '🏆 Streamer Ranking'}
+                </button>
+              ))}
+            </div>
+
+            {/* Overview tab */}
+            {activeTab === 'overview' && <>
+
             {/* Hero card */}
             <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
               {result.header_image && (
@@ -256,8 +286,12 @@ export default function ClarityPage() {
                 <h3 className="font-black text-lg mb-1 flex items-center gap-2">
                   <BarChart2 size={18} className="text-purple-600" /> JP Streamer Activity
                 </h3>
-                <p className="text-slate-400 text-xs mb-5">Who is currently streaming this game in Japan</p>
-                <StreamerChart streamers={result.twitch.top_streamers} />
+                <p className="text-slate-400 text-xs mb-5">Click a streamer to see their ROI analysis</p>
+                <StreamerChart
+                  streamers={result.twitch.top_streamers}
+                  steamId={result.steam_id}
+                  gameName={result.game_name}
+                />
                 <div className="mt-4 p-3 bg-purple-50 rounded-xl border border-purple-100">
                   <p className="text-purple-700 text-xs font-medium">
                     💡 <strong>Pro tip:</strong> Streamers with smaller but engaged audiences often drive more purchases than mega-streamers. Upgrade to Pro to see purchase conversion estimates.
@@ -314,6 +348,79 @@ export default function ClarityPage() {
                 Upgrade to Pro <ArrowRight size={14} />
               </Link>
             </div>
+
+            </> /* end overview tab */}
+
+            {/* Ranking tab */}
+            {activeTab === 'ranking' && (
+              <div className="space-y-4">
+                {!ranking ? (
+                  <div className="text-center py-12 text-slate-400 text-sm animate-pulse">Loading streamer ranking...</div>
+                ) : (
+                  <>
+                    {/* Genre + warning */}
+                    <div className="flex flex-wrap gap-3 items-center">
+                      <span className="bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold px-3 py-1.5 rounded-full">
+                        🎮 Genre: {ranking.game_genre}
+                      </span>
+                      <span className="bg-slate-100 text-slate-600 text-xs px-3 py-1.5 rounded-full">
+                        {ranking.total_live_streams} streamers live · {ranking.total_concurrent_viewers?.toLocaleString()} total viewers
+                      </span>
+                    </div>
+
+                    {ranking.concurrent_warning && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-yellow-700 text-sm">
+                        {ranking.concurrent_warning}
+                      </div>
+                    )}
+
+                    {/* Streamer list */}
+                    {(ranking.streamers || []).length === 0 ? (
+                      <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center">
+                        <p className="text-slate-400">No active streamers found for this game right now.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {(ranking.streamers || []).map((s: any, i: number) => (
+                          <Link key={i} href={s.streamer_page_url}
+                            className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-4 hover:shadow-sm transition-shadow block">
+                            <div className="text-slate-400 font-black w-6 text-center text-sm">#{i + 1}</div>
+                            {s.profile_image && (
+                              <img src={s.profile_image} alt={s.username}
+                                className="w-10 h-10 rounded-full border border-slate-200 shrink-0" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-black text-sm">{s.username}</span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-bold border ${
+                                  s.genre_match
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : 'bg-slate-50 text-slate-500 border-slate-200'
+                                }`}>{s.genre_match_label}</span>
+                              </div>
+                              <div className="text-slate-400 text-xs truncate mt-0.5">{s.stream_title}</div>
+                              {s.specializes_in?.length > 0 && (
+                                <div className="flex gap-1 mt-1 flex-wrap">
+                                  {s.specializes_in.map((g: string, j: number) => (
+                                    <span key={j} className="text-xs bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">{g}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="font-black text-sm">{s.viewer_count.toLocaleString()}</div>
+                              <div className="text-slate-400 text-xs">viewers</div>
+                              <div className="text-slate-300 text-xs mt-1">{s.viewer_share_pct}% share</div>
+                            </div>
+                            <ExternalLink size={14} className="text-slate-300 shrink-0" />
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
 
           </motion.div>
         )}

@@ -115,6 +115,40 @@ export async function getStreamerInfo(username: string): Promise<TwitchStreamer 
   return data.data?.[0] || null;
 }
 
+/** Get multiple streamers info at once */
+export async function getStreamersInfo(usernames: string[]): Promise<TwitchStreamer[]> {
+  if (!usernames.length) return [];
+  const token = await getTwitchToken();
+  const query = usernames.slice(0, 100).map(u => `login=${encodeURIComponent(u)}`).join('&');
+  const res = await fetch(
+    `https://api.twitch.tv/helix/users?${query}`,
+    { headers: twitchHeaders(token) }
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.data || [];
+}
+
+/** Get top JP streamers for a game by searching recent VODs */
+export async function getTopJPStreamersForGame(gameId: string, limit = 50): Promise<{
+  user_id: string;
+  user_name: string;
+  viewer_count: number;
+  title: string;
+  language: string;
+  started_at: string;
+}[]> {
+  const token = await getTwitchToken();
+  // Get live + recent streams, no language filter
+  const res = await fetch(
+    `https://api.twitch.tv/helix/streams?game_id=${gameId}&first=${limit}`,
+    { headers: twitchHeaders(token) }
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.data || []).filter((s: any) => s.viewer_count >= 20);
+}
+
 /** Get past broadcasts for a streamer */
 export async function getPastBroadcasts(userId: string, limit = 10): Promise<{
   id: string;
@@ -123,6 +157,7 @@ export async function getPastBroadcasts(userId: string, limit = 10): Promise<{
   duration: string;
   view_count: number;
   game_name?: string;
+  game_id?: string;
 }[]> {
   const token = await getTwitchToken();
   const res = await fetch(
@@ -137,5 +172,6 @@ export async function getPastBroadcasts(userId: string, limit = 10): Promise<{
     created_at: v.created_at,
     duration: v.duration,
     view_count: v.view_count,
+    game_id: v.game_id,
   }));
 }

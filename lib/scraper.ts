@@ -129,20 +129,41 @@ export async function getEbaySoldPrice(query: string): Promise<number> {
 
   const prices: number[] = [];
   let m: RegExpExecArray | null;
-  const dollarPattern = /\$([\d,]+\.\d{2})/g;
-  while ((m = dollarPattern.exec(html)) !== null) {
-    const val = parseFloat(m[1].replace(/,/g, ''));
-    // Filter out noise: shipping fees ($3-$15), very cheap ($<5), and unrealistic ($>5000)
+
+  // Try JSON-LD structured data first (most accurate — actual item prices)
+  const jsonLdPattern = /"offers"\s*:\s*\{[^}]*"price"\s*:\s*"?([\d.]+)"?/g;
+  while ((m = jsonLdPattern.exec(html)) !== null) {
+    const val = parseFloat(m[1]);
     if (val >= 5 && val < 5000) prices.push(val);
   }
+
+  // Fallback: grab prices near sold item markers
+  if (prices.length < 3) {
+    // eBay sold listings show price in specific context
+    const soldPattern = /SOLD[^$]*\$([\d,]+\.\d{2})|\$([\d,]+\.\d{2})[^$]{0,50}sold/gi;
+    while ((m = soldPattern.exec(html)) !== null) {
+      const val = parseFloat((m[1] || m[2]).replace(/,/g, ''));
+      if (val >= 10 && val < 5000) prices.push(val);
+    }
+  }
+
+  // Final fallback: all dollar amounts with reasonable range
+  if (prices.length < 3) {
+    const dollarPattern = /\$([\d,]+\.\d{2})/g;
+    while ((m = dollarPattern.exec(html)) !== null) {
+      const val = parseFloat(m[1].replace(/,/g, ''));
+      if (val >= 18 && val < 5000) prices.push(val);
+    }
+  }
+
   if (prices.length === 0) return 0;
   prices.sort((a, b) => a - b);
-  // Use 25th-75th percentile to avoid outliers
+  // Use median of middle 50% to avoid outliers
   const p25 = prices[Math.floor(prices.length * 0.25)];
   const p75 = prices[Math.floor(prices.length * 0.75)];
   const filtered = prices.filter(p => p >= p25 && p <= p75);
   const sample = filtered.length > 0 ? filtered : prices;
-  return sample.reduce((s, p) => s + p, 0) / sample.length;
+  return Math.round((sample.reduce((s, p) => s + p, 0) / sample.length) * 100) / 100;
 }
 
 export async function getExchangeRate(): Promise<number> {

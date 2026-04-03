@@ -57,28 +57,50 @@ export interface TwitchStreamer {
   broadcaster_type: string;
 }
 
-/** Search streamers currently streaming a specific game */
-export async function getStreamsForGame(gameId: string, limit = 20): Promise<TwitchStream[]> {
+/** Clean game name for Twitch search (remove trademark symbols etc.) */
+function cleanGameName(name: string): string {
+  return name
+    .replace(/[®™©]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Search streamers currently streaming a specific game (no language filter, min viewers threshold) */
+export async function getStreamsForGame(gameId: string, limit = 50, minViewers = 20): Promise<TwitchStream[]> {
   const token = await getTwitchToken();
   const res = await fetch(
-    `https://api.twitch.tv/helix/streams?game_id=${gameId}&first=${limit}&language=ja`,
+    `https://api.twitch.tv/helix/streams?game_id=${gameId}&first=${limit}`,
     { headers: twitchHeaders(token) }
   );
   if (!res.ok) return [];
   const data = await res.json();
-  return data.data || [];
+  // Filter by minimum viewers
+  return (data.data || []).filter((s: TwitchStream) => s.viewer_count >= minViewers);
 }
 
-/** Get game ID by name */
+/** Get game ID by name — tries exact match then search fallback */
 export async function getTwitchGameId(gameName: string): Promise<string | null> {
   const token = await getTwitchToken();
+  const cleaned = cleanGameName(gameName);
+
+  // Try exact match first
   const res = await fetch(
-    `https://api.twitch.tv/helix/games?name=${encodeURIComponent(gameName)}`,
+    `https://api.twitch.tv/helix/games?name=${encodeURIComponent(cleaned)}`,
     { headers: twitchHeaders(token) }
   );
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.data?.[0]?.id || null;
+  if (res.ok) {
+    const data = await res.json();
+    if (data.data?.[0]?.id) return data.data[0].id;
+  }
+
+  // Fallback: search by keyword
+  const searchRes = await fetch(
+    `https://api.twitch.tv/helix/search/categories?query=${encodeURIComponent(cleaned)}&first=1`,
+    { headers: twitchHeaders(token) }
+  );
+  if (!searchRes.ok) return null;
+  const searchData = await searchRes.json();
+  return searchData.data?.[0]?.id || null;
 }
 
 /** Get streamer info by username */

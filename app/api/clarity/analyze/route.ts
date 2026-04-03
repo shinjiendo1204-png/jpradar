@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSteamReviews, getSteamAppInfo, getRecentJapaneseReviews } from '@/lib/steam';
+import { getSteamReviews, getSteamReviewsAll, getSteamAppInfo, getRecentJapaneseReviews } from '@/lib/steam';
 import { getTwitchGameId, getStreamsForGame } from '@/lib/twitch';
 
 /**
@@ -28,16 +28,17 @@ async function summarizeReviews(reviews: { text: string; positive: boolean }[]):
           {
             role: 'system',
             content: `You are analyzing Japanese game reviews. Extract the 3 most common positive themes and 3 most common negative themes.
+Focus on SPECIFIC, MEANINGFUL feedback (gameplay mechanics, community, content, performance) — NOT vague praise or simple insults.
 Return JSON exactly like:
 {
-  "positive": [{"theme": "English summary", "count": N}, ...],
-  "negative": [{"theme": "English summary", "count": N}, ...]
+  "positive": [{"theme": "Insightful English summary", "count": N}, ...],
+  "negative": [{"theme": "Insightful English summary", "count": N}, ...]
 }
-Estimate counts based on how many reviews mention each theme. Be concise (max 8 words per theme).`,
+Estimate counts. Each theme must be a complete English sentence fragment (6-10 words). Skip generic comments like "fun game" or "bad game".`,
           },
           { role: 'user', content: texts },
         ],
-        max_tokens: 300,
+        max_tokens: 400,
         temperature: 0,
         response_format: { type: 'json_object' },
       }),
@@ -54,36 +55,43 @@ Estimate counts based on how many reviews mention each theme. Be concise (max 8 
 }
 
 function calcJapanScore(params: {
-  totalReviews: number;
-  reviewScore: number; // 0-9
+  totalReviews: number;      // all languages
+  reviewScore: number;       // 0-9 all languages
+  jpPositiveRate: number;    // 0-1 JP reviews positive ratio
+  jpReviewCount: number;     // JP review count
   streamerCount: number;
-  buyingSignalRate: number; // 0-1
 }): number {
-  const { totalReviews, reviewScore, streamerCount, buyingSignalRate } = params;
+  const { totalReviews, reviewScore, jpPositiveRate, jpReviewCount, streamerCount } = params;
 
-  // Review volume: 0-40pts
-  let reviewVolume = 0;
-  if (totalReviews >= 2000) reviewVolume = 40;
-  else if (totalReviews >= 500) reviewVolume = 25;
-  else if (totalReviews >= 100) reviewVolume = 15;
-  else if (totalReviews >= 10) reviewVolume = 8;
-  else reviewVolume = Math.min(totalReviews, 5);
+  // Market size (all languages): 0-30pts
+  let marketScore = 0;
+  if (totalReviews >= 100000) marketScore = 30;
+  else if (totalReviews >= 10000) marketScore = 22;
+  else if (totalReviews >= 1000) marketScore = 15;
+  else if (totalReviews >= 100) marketScore = 8;
+  else marketScore = Math.min(totalReviews / 10, 5);
 
-  // Review score: 0-30pts
-  const reviewQuality = Math.round((reviewScore / 9) * 30);
+  // Global review quality: 0-25pts
+  const qualityScore = Math.round((reviewScore / 9) * 25);
 
-  // Twitch: 0-20pts
+  // JP sentiment: 0-25pts (based on JP reviews positive ratio)
+  let jpScore = 0;
+  if (jpReviewCount >= 10) {
+    jpScore = Math.round(jpPositiveRate * 25);
+  } else if (jpReviewCount > 0) {
+    jpScore = Math.round(jpPositiveRate * 10); // low confidence
+  }
+
+  // Twitch JP streamers: 0-20pts
   let twitchScore = 0;
-  if (streamerCount >= 20) twitchScore = 20;
-  else if (streamerCount >= 10) twitchScore = 15;
-  else if (streamerCount >= 5) twitchScore = 10;
-  else if (streamerCount >= 2) twitchScore = 6;
-  else if (streamerCount >= 1) twitchScore = 3;
+  if (streamerCount >= 50) twitchScore = 20;
+  else if (streamerCount >= 20) twitchScore = 15;
+  else if (streamerCount >= 10) twitchScore = 10;
+  else if (streamerCount >= 5) twitchScore = 7;
+  else if (streamerCount >= 2) twitchScore = 4;
+  else if (streamerCount >= 1) twitchScore = 2;
 
-  // Buying signals: 0-10pts
-  const buyingScore = Math.round(buyingSignalRate * 10);
-
-  return Math.min(reviewVolume + reviewQuality + twitchScore + buyingScore, 100);
+  return Math.min(marketScore + qualityScore + jpScore + twitchScore, 100);
 }
 
 export async function GET(req: NextRequest) {
@@ -95,8 +103,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [reviews, appInfo, recentReviews, twitchGameId] = await Promise.all([
+    const [reviews, reviewsAll, appInfo, recentReviews, twitchGameId] = await Promise.all([
       getSteamReviews(steamId, 'japanese'),
+      getSteamReviewsAll(steamId),
       getSteamAppInfo(steamId),
       getRecentJapaneseReviews(steamId, 20),
       gameName ? getTwitchGameId(gameName) : Promise.resolve(null),
@@ -120,12 +129,17 @@ export async function GET(req: NextRequest) {
       ? buyingReviews.length / recentReviews.length
       : 0;
 
+    // JP sentiment rate
+    const jpTotal = (reviews?.total_positive || 0) + (reviews?.total_negative || 0) || reviews?.total_reviews || 0;
+    const jpPositiveRate = jpTotal > 0 ? (reviews?.total_positive || 0) / jpTotal : 0;
+
     // Score
     const japanScore = calcJapanScore({
-      totalReviews: reviews?.total_reviews || 0,
-      reviewScore: reviews?.review_score || 0,
+      totalReviews: reviewsAll?.total || 0,
+      reviewScore: reviewsAll?.score ?? reviews?.review_score ?? 0,
+      jpPositiveRate,
+      jpReviewCount: reviews?.total_reviews || 0,
       streamerCount: displayStreams.length,
-      buyingSignalRate,
     });
 
     // Summarize reviews with AI

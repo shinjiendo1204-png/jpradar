@@ -25,6 +25,43 @@ export interface SteamAppInfo {
   genres: string[];
 }
 
+/** Get total review count from appdetails (more accurate than appreviews for totals) */
+export async function getSteamReviewsAll(appId: string): Promise<{ total: number; positive: number; score: number } | null> {
+  try {
+    // appdetails returns metacritic + total recommendation counts
+    const res = await fetch(
+      `https://store.steampowered.com/api/appdetails?appids=${appId}&filters=recommendations`,
+      { next: { revalidate: 3600 } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const appData = data[appId];
+    if (!appData?.success) return null;
+
+    const recs = appData.data?.recommendations;
+    const totalRecs = recs?.total || 0;
+
+    // Also get score from standard reviews endpoint (all languages)
+    const reviewRes = await fetch(
+      `https://store.steampowered.com/appreviews/${appId}?json=1&language=all&num_per_page=0`,
+      { next: { revalidate: 3600 } }
+    );
+    let score = 0;
+    if (reviewRes.ok) {
+      const reviewData = await reviewRes.json();
+      score = reviewData.query_summary?.review_score || 0;
+    }
+
+    return {
+      total: totalRecs,
+      positive: 0,
+      score,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Get review summary for a Steam app */
 export async function getSteamReviews(appId: string, language = 'japanese'): Promise<SteamReviewSnapshot | null> {
   try {

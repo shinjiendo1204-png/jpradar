@@ -124,23 +124,11 @@ export async function getEbaySoldPrice(query: string): Promise<number> {
   }
 
   const prices: number[] = [];
-  // Multiple patterns to catch different eBay HTML structures
-  const p1 = /class="s-item__price"[^>]*>\s*(?:US\s*)?\$\s*([\d,]+\.?\d*)/gi;
   let m: RegExpExecArray | null;
-  while ((m = p1.exec(html)) !== null) {
+  // Pattern: $XX.XX dollar amounts in the page
+  const dollarPattern = /\$([\d,]+\.\d{2})/g;
+  while ((m = dollarPattern.exec(html)) !== null) {
     const val = parseFloat(m[1].replace(/,/g, ''));
-    if (val > 0.5 && val < 50000) prices.push(val);
-  }
-  // Pattern 2: data-price attributes
-  const p2 = /data-price="([\d.]+)"/g;
-  while ((m = p2.exec(html)) !== null) {
-    const val = parseFloat(m[1]);
-    if (val > 0.5 && val < 50000) prices.push(val);
-  }
-  // Pattern 3: JSON-LD price
-  const p3 = /"price":\s*"?([\d.]+)"?/g;
-  while ((m = p3.exec(html)) !== null) {
-    const val = parseFloat(m[1]);
     if (val > 0.5 && val < 50000) prices.push(val);
   }
   if (prices.length === 0) return 0;

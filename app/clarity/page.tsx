@@ -93,13 +93,16 @@ export default function ClarityPage() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [ranking, setRanking] = useState<any>(null);
   const [trending, setTrending] = useState<any[]>([]);
+  const [topStreamers, setTopStreamers] = useState<any[]>([]);
   const [translations, setTranslations] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [streamerResults, setStreamerResults] = useState<any[]>([]);
+  const [searchMode, setSearchMode] = useState<'game' | 'streamer'>('game');
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<'overview' | 'ranking'>('overview');
   const [langFilter, setLangFilter] = useState<LangFilter>('all');
-  const [timeFilter] = useState<TimeFilter>('now'); // future: 7d/30d via VOD API
+  const [timeFilter] = useState<TimeFilter>('now');
 
   const searchRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<any>(null);
@@ -109,20 +112,33 @@ export default function ClarityPage() {
       .then(r => r.json())
       .then(d => setTrending(d.trending_jp_games || []))
       .catch(() => {});
+    // Top JP streamers overall
+    fetch('/api/clarity/ranking?steam_id=730&game_name=Counter-Strike+2')
+      .then(r => r.json())
+      .then(d => setTopStreamers((d.streamers || []).slice(0, 8)))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
-    if (query.length < 2) { setSearchResults([]); return; }
+    if (query.length < 2) { setSearchResults([]); setStreamerResults([]); return; }
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
       try {
-        const res = await fetch(`/api/clarity/search?q=${encodeURIComponent(query)}`);
-        const data = await res.json();
-        setSearchResults(data.results || []);
+        if (searchMode === 'streamer') {
+          const res = await fetch(`/api/clarity/search-streamer?q=${encodeURIComponent(query)}`);
+          const data = await res.json();
+          setStreamerResults(data.results || []);
+          setSearchResults([]);
+        } else {
+          const res = await fetch(`/api/clarity/search?q=${encodeURIComponent(query)}`);
+          const data = await res.json();
+          setSearchResults(data.results || []);
+          setStreamerResults([]);
+        }
       } finally { setSearching(false); }
     }, 400);
-  }, [query]);
+  }, [query, searchMode]);
 
   async function analyze(game: GameSearchResult) {
     setSelectedGame(game);
@@ -184,17 +200,32 @@ export default function ClarityPage() {
 
         {/* Search */}
         <div className="relative mb-6" ref={searchRef}>
+          {/* Mode toggle */}
+          <div className="flex gap-1 mb-2">
+            {(['game', 'streamer'] as const).map(mode => (
+              <button key={mode} onClick={() => { setSearchMode(mode); setQuery(''); }}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors border ${
+                  searchMode === mode ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200'
+                }`}>
+                {mode === 'game' ? '🎮 Game' : '📺 Streamer'}
+              </button>
+            ))}
+            <span className="ml-2 text-xs text-slate-400 self-center">Steam-based data only · Valorant/non-Steam games coming soon</span>
+          </div>
+
           <div className="bg-white border border-slate-200 rounded-2xl p-2 flex items-center gap-3 shadow-sm">
             <Search size={18} className="text-slate-400 ml-3 shrink-0" />
             <input
               type="text" value={query}
               onChange={e => { setQuery(e.target.value); setSelectedGame(null); }}
-              placeholder="Search any game on Steam..."
+              placeholder={searchMode === 'game' ? 'Search any Steam game...' : 'Search Twitch streamer name...'}
               className="flex-1 py-3 text-slate-900 placeholder-slate-400 focus:outline-none text-base"
             />
             {searching && <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-3" />}
           </div>
+
           <AnimatePresence>
+            {/* Game results */}
             {searchResults.length > 0 && (
               <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-lg z-20 overflow-hidden">
@@ -204,37 +235,102 @@ export default function ClarityPage() {
                     {game.image && <img src={game.image} alt={game.name} className="w-10 h-8 object-cover rounded" />}
                     <div className="flex-1 min-w-0">
                       <div className="font-bold text-sm">{game.name}</div>
-                      <div className="text-slate-400 text-xs">App ID: {game.app_id} · {game.price}</div>
+                      <div className="text-slate-400 text-xs">Steam · {game.price}</div>
                     </div>
                     <ArrowRight size={14} className="text-slate-400 shrink-0" />
                   </button>
                 ))}
               </motion.div>
             )}
+            {/* Streamer results */}
+            {streamerResults.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-lg z-20 overflow-hidden">
+                {streamerResults.map((s: any) => (
+                  <Link key={s.login}
+                    href={`/clarity/streamer/${s.login}`}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0">
+                    {s.thumbnail && <img src={s.thumbnail} alt={s.display_name} className="w-8 h-8 rounded-full object-cover" />}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-sm flex items-center gap-2">
+                        {s.display_name}
+                        {s.is_live && <span className="text-xs bg-red-500 text-white px-1.5 py-0.5 rounded-full">LIVE</span>}
+                      </div>
+                      <div className="text-slate-400 text-xs">
+                        {s.broadcaster_language === 'ja' ? '🇯🇵 ' : ''}{s.game_name || 'Twitch streamer'}
+                      </div>
+                    </div>
+                    <ArrowRight size={14} className="text-slate-400 shrink-0" />
+                  </Link>
+                ))}
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
 
-        {/* Trending */}
-        {!result && !loading && trending.length > 0 && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-8">
-            <div className="flex items-center gap-2 mb-3">
-              <Flame size={16} className="text-orange-500" />
-              <span className="text-sm font-black text-slate-700">Hot on JP Twitch right now</span>
-              <span className="text-xs text-slate-400">· updated every 15 min</span>
+        {/* 2-column home: Games + Streamers */}
+        {!result && !loading && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid md:grid-cols-2 gap-6 mb-8">
+
+            {/* Left: Trending Games */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Flame size={16} className="text-orange-500" />
+                <span className="font-black text-sm">Hot on JP Twitch</span>
+                <span className="text-xs text-slate-400 ml-auto">live · 15min</span>
+              </div>
+              {trending.length === 0 ? (
+                <div className="text-slate-400 text-sm text-center py-8 animate-pulse">Loading...</div>
+              ) : (
+                <div className="space-y-1">
+                  {trending.slice(0, 8).map((game, i) => (
+                    <button key={i} onClick={() => { setSearchMode('game'); setQuery(game.game_name); }}
+                      className="w-full flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-slate-50 transition-colors text-left group">
+                      <span className="text-slate-300 font-black text-xs w-5">#{game.rank}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-sm group-hover:text-orange-600 transition-colors truncate">{game.game_name}</div>
+                        <div className="text-slate-400 text-xs">{game.jp_streamers} streamers · {game.jp_viewers?.toLocaleString()} viewers</div>
+                      </div>
+                      <span className="text-orange-500 text-xs font-bold shrink-0">{game.heat_score}🌡️</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-              {trending.slice(0, 5).map((game, i) => (
-                <button key={i} onClick={() => { setQuery(game.game_name); }}
-                  className="bg-white border border-slate-200 rounded-2xl p-3 text-left hover:border-orange-300 hover:shadow-sm transition-all group">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs text-slate-400 font-bold">#{game.rank}</span>
-                    <span className="text-xs font-bold text-orange-600">{game.heat_score}🌡️</span>
-                  </div>
-                  <div className="font-bold text-xs group-hover:text-orange-600 transition-colors line-clamp-2 mb-1">{game.game_name}</div>
-                  <div className="text-slate-400 text-xs">{game.jp_streamers} 🇯🇵 streamers</div>
-                </button>
-              ))}
+
+            {/* Right: Top JP Streamers */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Users size={16} className="text-purple-600" />
+                <span className="font-black text-sm">Top JP Streamers Now</span>
+                <span className="text-xs text-slate-400 ml-auto">by viewers</span>
+              </div>
+              {topStreamers.length === 0 ? (
+                <div className="text-slate-400 text-sm text-center py-8 animate-pulse">Loading...</div>
+              ) : (
+                <div className="space-y-1">
+                  {topStreamers.map((s: any, i: number) => (
+                    <Link key={i} href={`/clarity/streamer/${s.username}`}
+                      className="flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-slate-50 transition-colors">
+                      <span className="text-slate-300 font-black text-xs w-5">#{i+1}</span>
+                      {s.profile_image && <img src={s.profile_image} alt={s.username} className="w-7 h-7 rounded-full border border-slate-200 shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-sm truncate flex items-center gap-1.5">
+                          {s.username}
+                          {s.language === 'ja' && <span className="text-xs">🇯🇵</span>}
+                        </div>
+                        <div className="text-slate-400 text-xs truncate">{s.stream_title?.slice(0, 40)}</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="font-bold text-xs">{s.viewer_count?.toLocaleString()}</div>
+                        <div className="text-slate-400 text-xs">viewers</div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
+
           </motion.div>
         )}
 

@@ -148,9 +148,13 @@ export async function GET(req: NextRequest) {
       : 0.1;
 
     // V-Function
+    const engagementRate = avgViewCount > 0
+      ? Math.min(clipsPerBroadcast / (avgViewCount / 1000), 1)
+      : 0;
+
     const vResult = calcVFunction({
       avg_view_count: avgViewCount,
-      clips_per_broadcast: clipsPerBroadcast,
+      engagement_rate: engagementRate,
       review_delta_per_stream: avgReviewDelta,
       genre_fit: genreFitScore,
       peak_hour_bonus: 1.0,
@@ -193,10 +197,10 @@ export async function GET(req: NextRequest) {
         cbi_index: vResult.cbi_index,
         interpretation: vResult.interpretation,
         components: {
-          reach: vResult.reach_component,
-          engagement: vResult.engagement_component,
-          conversion: vResult.conversion_component,
-          fit: vResult.fit_component,
+          reach: vResult.components.reach_efficiency,
+          engagement: vResult.components.engagement,
+          conversion: vResult.components.conversion,
+          fit: vResult.components.fit,
         },
       },
       game_analysis: {

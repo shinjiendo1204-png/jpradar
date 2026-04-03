@@ -66,6 +66,11 @@ export async function POST(req: NextRequest) {
 
     const liveStreams = await getTopJPStreamersForGame(twitchGameId, 30);
 
+    // Calculate category average viewers
+    const categoryAvgViews = liveStreams.length > 0
+      ? liveStreams.reduce((s, st) => s + st.viewer_count, 0) / liveStreams.length
+      : 5000;
+
     // Build V-Function scores for each streamer
     const streamersWithScores: StreamerForOptimizer[] = await Promise.all(
       liveStreams.slice(0, 15).map(async (stream) => {
@@ -107,10 +112,14 @@ export async function POST(req: NextRequest) {
           reviewDeltaPerStream = 0.1;
         }
 
+        // Engagement rate estimate from clips relative to viewers
+        const engagementRate = avgViews > 0 ? Math.min(clipsPerBroadcast / (avgViews / 1000), 1) : 0;
+
         const vResult = calcVFunction({
           avg_view_count: avgViews,
-          clips_per_broadcast: clipsPerBroadcast,
+          avg_category_views: categoryAvgViews,
           review_delta_per_stream: reviewDeltaPerStream,
+          engagement_rate: engagementRate,
           genre_fit: genreFit,
           peak_hour_bonus: 1.0,
         });

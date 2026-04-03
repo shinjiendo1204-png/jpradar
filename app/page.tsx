@@ -3,37 +3,83 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
-import { ArrowRight, CheckCircle, Radio, TrendingUp, Bell, FileText, Zap, Shield, Globe } from "lucide-react";
+import {
+  ArrowRight, CheckCircle, Zap, Bell, TrendingUp,
+  DollarSign, Package, Search, ChevronRight
+} from "lucide-react";
 import Link from "next/link";
 
-const SAMPLE_REPORT = {
-  date: "April 2, 2026",
-  keyword: "AI SaaS",
-  summary: "Significant positive buzz around AI productivity tools this week. 3 viral threads on X JP discussing enterprise AI adoption. One emerging competitor gaining traction with freemium model.",
-  trends: [
-    { label: "Sentiment", value: "78% Positive", up: true },
-    { label: "Volume", value: "+34% vs last week", up: true },
-    { label: "Top Platform", value: "X (Twitter JP)", up: true },
-  ],
-  topPosts: [
-    { platform: "X JP", content: "\"AI tools for business are finally getting good at Japanese context. Using [keyword] daily now. Game changer for our team.\" — @techfounder_jp (12K followers, 847 likes)", sentiment: "positive" },
-    { platform: "Note", content: "Long-form article: '2026年のSaaS市場を変えるAIツール10選' — 4.2K reads, featured by Note editors", sentiment: "positive" },
-  ],
-  action: "Consider creating JP-specific content around 'enterprise AI adoption' — high search intent this week.",
+// Sample deal card for the LP demo
+const SAMPLE_DEALS = [
+  {
+    title_en: "Super Famicom Final Fantasy VI",
+    title_ja: "スーパーファミコン ファイナルファンタジーVI",
+    buy_jpy: 1980,
+    ship_jpy: 2800,
+    sell_usd: 89,
+    profit_usd: 62,
+    margin: 74,
+    tier: "excellent",
+    source: "Surugaya",
+    platform: "eBay",
+  },
+  {
+    title_en: "Pokemon Card Game Booster Box (JP)",
+    title_ja: "ポケモンカードゲーム ブースターボックス",
+    buy_jpy: 4500,
+    ship_jpy: 3200,
+    sell_usd: 145,
+    profit_usd: 88,
+    margin: 63,
+    tier: "excellent",
+    source: "Surugaya",
+    platform: "Whatnot",
+  },
+  {
+    title_en: "Neon Genesis Evangelion Figure Limited",
+    title_ja: "新世紀エヴァンゲリオン フィギュア 限定版",
+    buy_jpy: 3200,
+    ship_jpy: 3600,
+    sell_usd: 78,
+    profit_usd: 34,
+    margin: 46,
+    tier: "high",
+    source: "Surugaya",
+    platform: "eBay",
+  },
+];
+
+const TIER_COLOR: Record<string, string> = {
+  excellent: "text-red-500",
+  high: "text-emerald-600",
+  medium: "text-yellow-500",
+};
+
+const TIER_BG: Record<string, string> = {
+  excellent: "bg-red-50 border-red-200",
+  high: "bg-emerald-50 border-emerald-200",
+  medium: "bg-yellow-50 border-yellow-200",
+};
+
+const TIER_LABEL: Record<string, string> = {
+  excellent: "🔥 Hot Deal",
+  high: "💚 Good Deal",
+  medium: "🟡 Fair Deal",
 };
 
 export default function HomePage() {
   const [email, setEmail] = useState("");
-  const [keyword, setKeyword] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email || !keyword) return;
+    if (!email) return;
     setLoading(true);
     try {
-      await supabase.from("jpradar_waitlist").insert({ email, keyword, created_at: new Date().toISOString() });
+      await supabase
+        .from("jpradar_waitlist")
+        .insert({ email, created_at: new Date().toISOString() });
     } catch {}
     setSubmitted(true);
     setLoading(false);
@@ -44,57 +90,68 @@ export default function HomePage() {
 
       {/* NAV */}
       <nav className="flex justify-between items-center px-6 py-5 max-w-6xl mx-auto border-b border-slate-100">
-        <div className="font-black text-xl tracking-tight text-slate-900">
+        <div className="font-black text-xl tracking-tight">
           JP<span className="text-blue-600">RADAR</span>
         </div>
         <div className="flex items-center gap-4">
-          <Link href="/auth/login" className="text-slate-500 hover:text-slate-900 text-sm font-medium transition-colors">Login</Link>
-          <a href="#signup" className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition-colors">
-            Join Beta
+          <Link href="/auth/login" className="text-slate-500 hover:text-slate-900 text-sm font-medium transition-colors">
+            Login
+          </Link>
+          <a
+            href="#signup"
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition-colors"
+          >
+            Get Early Access
           </a>
         </div>
       </nav>
 
       {/* HERO */}
-      <section className="max-w-4xl mx-auto px-6 pt-20 pb-24 text-center">
+      <section className="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           className="inline-flex items-center gap-2 bg-blue-50 border border-blue-100 text-blue-600 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest mb-8"
         >
-          <Radio size={12} className="animate-pulse" />
-          Japan Social Intelligence Platform
+          <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse inline-block" />
+          Japan Arbitrage Scanner — Live
         </motion.div>
 
         <motion.h1
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="text-5xl md:text-7xl font-black tracking-tighter mb-6 leading-tight text-slate-900"
+          className="text-5xl md:text-7xl font-black tracking-tighter mb-6 leading-[1.05]"
         >
-          See what Japan is<br />
-          <span className="text-blue-600">saying about you.</span>
+          Japan's thrift stores<br />
+          <span className="text-blue-600">are printing money.</span>
         </motion.h1>
 
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="text-xl text-slate-500 mb-10 max-w-2xl mx-auto leading-relaxed"
+          className="text-xl text-slate-500 mb-8 max-w-2xl mx-auto leading-relaxed"
         >
-          Japanese Twitter, Note, and online communities — monitored 24/7.
-          Delivered to your Slack in English. Every morning.
+          jpradar scans Surugaya, Yahoo Auctions and Hard Off 24/7,
+          compares prices on eBay and Whatnot, and alerts you the moment
+          a profitable deal appears — in English, with profit included.
         </motion.p>
 
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="flex flex-wrap items-center justify-center gap-6 mb-10"
+          className="flex flex-wrap justify-center gap-5 mb-10 text-sm text-slate-500"
         >
-          {["No Japanese required", "Daily English reports", "Slack integration"].map((t, i) => (
-            <div key={i} className="flex items-center gap-2 text-slate-500 text-sm">
-              <CheckCircle size={16} className="text-green-500" />
+          {[
+            "No Japanese required",
+            "Profit calculated automatically",
+            "Shipping cost included",
+            "Slack & Discord alerts",
+          ].map((t, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <CheckCircle size={16} className="text-emerald-500 shrink-0" />
               {t}
             </div>
           ))}
@@ -107,109 +164,161 @@ export default function HomePage() {
           transition={{ delay: 0.4 }}
           className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-black text-lg px-8 py-4 rounded-xl transition-colors shadow-lg shadow-blue-200"
         >
-          Join the Beta — Free <ArrowRight size={20} />
+          Get Early Access — Free <ArrowRight size={20} />
         </motion.a>
-        <p className="text-slate-400 text-xs mt-3">First 20 companies get 3 months free.</p>
+        <p className="text-slate-400 text-xs mt-3">No credit card. Cancel anytime.</p>
       </section>
 
-      {/* SAMPLE REPORT */}
-      <section className="bg-slate-50 py-20">
+      {/* LIVE DEAL FEED DEMO */}
+      <section className="bg-slate-950 py-20">
         <div className="max-w-4xl mx-auto px-6">
-          <div className="text-center mb-10">
-            <h2 className="text-3xl font-black mb-2 text-slate-900">This lands in your Slack every morning.</h2>
-            <p className="text-slate-500 text-sm">Real format. Sample data.</p>
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-widest mb-4">
+              <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+              Live Deal Feed — Sample
+            </div>
+            <h2 className="text-3xl font-black text-white mb-3">
+              This lands in your Slack right now.
+            </h2>
+            <p className="text-slate-400 text-sm">Real format. Sample data. Your deals will look exactly like this.</p>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-            <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-xs font-black text-white">JP</div>
-                <div>
-                  <div className="font-bold text-sm text-slate-900">JPRADAR Daily Report</div>
-                  <div className="text-slate-400 text-xs">{SAMPLE_REPORT.date} · Keyword: "{SAMPLE_REPORT.keyword}"</div>
-                </div>
-              </div>
-              <div className="text-green-600 text-xs font-bold flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span>LIVE
-              </div>
-            </div>
-
-            <div className="p-6 space-y-6">
-              <div>
-                <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Executive Summary</div>
-                <p className="text-slate-700 text-sm leading-relaxed">{SAMPLE_REPORT.summary}</p>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                {SAMPLE_REPORT.trends.map((t, i) => (
-                  <div key={i} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                    <div className="text-xs text-slate-400 mb-1">{t.label}</div>
-                    <div className="font-black text-sm text-green-600">{t.value}</div>
+          <div className="space-y-4">
+            {SAMPLE_DEALS.map((deal, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.1 * i }}
+                className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col md:flex-row md:items-center gap-4"
+              >
+                {/* Profit badge */}
+                <div className="shrink-0 text-center">
+                  <div className={`text-3xl font-black ${TIER_COLOR[deal.tier] || "text-white"}`}>
+                    +${deal.profit_usd}
                   </div>
-                ))}
-              </div>
-
-              <div>
-                <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Top Posts This Week</div>
-                <div className="space-y-3">
-                  {SAMPLE_REPORT.topPosts.map((p, i) => (
-                    <div key={i} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded font-bold">{p.platform}</span>
-                        <span className="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded font-bold">Positive</span>
-                      </div>
-                      <p className="text-slate-600 text-xs leading-relaxed">{p.content}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <div className="flex items-start gap-3">
-                  <Zap size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="text-xs font-bold text-amber-600 mb-1">Recommended Action</div>
-                    <p className="text-slate-700 text-xs">{SAMPLE_REPORT.action}</p>
+                  <div className="text-slate-500 text-xs mt-1">{deal.margin}% margin</div>
+                  <div className={`text-xs font-bold mt-2 px-2 py-1 rounded-full border ${TIER_BG[deal.tier]}`}>
+                    {TIER_LABEL[deal.tier]}
                   </div>
                 </div>
-              </div>
-            </div>
+
+                {/* Divider */}
+                <div className="hidden md:block w-px bg-slate-800 self-stretch" />
+
+                {/* Details */}
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-white text-sm mb-1 truncate">{deal.title_en}</div>
+                  <div className="text-slate-500 text-xs mb-3 truncate">{deal.title_ja}</div>
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    <span className="text-slate-400">
+                      💴 Buy <span className="text-white font-bold">¥{deal.buy_jpy.toLocaleString()}</span>
+                    </span>
+                    <span className="text-slate-600">→</span>
+                    <span className="text-slate-400">
+                      📦 Ship <span className="text-white font-bold">¥{deal.ship_jpy.toLocaleString()}</span>
+                    </span>
+                    <span className="text-slate-600">→</span>
+                    <span className="text-slate-400">
+                      💰 Sell on {deal.platform} <span className="text-emerald-400 font-bold">${deal.sell_usd}</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Source */}
+                <div className="shrink-0 text-right">
+                  <div className="text-slate-600 text-xs">Found on</div>
+                  <div className="text-blue-400 text-xs font-bold">{deal.source}</div>
+                </div>
+              </motion.div>
+            ))}
           </div>
+
+          <p className="text-center text-slate-600 text-xs mt-6">
+            jpradar scans every 2 hours. You get notified the moment profit exceeds your threshold.
+          </p>
         </div>
       </section>
 
       {/* HOW IT WORKS */}
-      <section className="max-w-4xl mx-auto px-6 py-20">
-        <h2 className="text-3xl font-black text-center mb-12 text-slate-900">How JPRADAR works</h2>
-        <div className="grid md:grid-cols-3 gap-6">
+      <section className="py-20 max-w-5xl mx-auto px-6">
+        <div className="text-center mb-14">
+          <h2 className="text-3xl font-black mb-3">How it works</h2>
+          <p className="text-slate-500 text-sm">Set it once. Deals come to you.</p>
+        </div>
+
+        <div className="grid md:grid-cols-4 gap-6">
           {[
-            { icon: <TrendingUp size={24} className="text-blue-600" />, step: "01", title: "Set your keywords", desc: "Enter your brand, competitors, or market topics. In English." },
-            { icon: <Radio size={24} className="text-blue-600" />, step: "02", title: "We monitor Japan 24/7", desc: "X JP, Note, Reddit JP, and more — scanned daily in Japanese." },
-            { icon: <Bell size={24} className="text-blue-600" />, step: "03", title: "Get English intel", desc: "Daily report in Slack. Sentiment, top posts, competitor moves, actions." },
+            {
+              icon: <Search size={22} className="text-blue-600" />,
+              step: "01",
+              title: "Scan",
+              desc: "jpradar monitors Surugaya, Yahoo Auctions, and Hard Off every 2 hours for new listings.",
+            },
+            {
+              icon: <TrendingUp size={22} className="text-blue-600" />,
+              step: "02",
+              title: "Price Check",
+              desc: "Each item is compared against eBay sold listings and Whatnot to find the real overseas price.",
+            },
+            {
+              icon: <DollarSign size={22} className="text-blue-600" />,
+              step: "03",
+              title: "Calculate",
+              desc: "Profit is calculated after shipping (tenso estimates), eBay fees (13%), and live exchange rate.",
+            },
+            {
+              icon: <Bell size={22} className="text-blue-600" />,
+              step: "04",
+              title: "Alert",
+              desc: "If profit exceeds your threshold, you get an instant Slack or Discord notification in English.",
+            },
           ].map((s, i) => (
-            <div key={i} className="bg-slate-50 border border-slate-200 rounded-2xl p-6 hover:border-blue-200 transition-colors">
-              <div className="mb-4">{s.icon}</div>
-              <div className="text-xs font-black text-slate-300 mb-2">{s.step}</div>
-              <h3 className="font-black mb-2 text-slate-900">{s.title}</h3>
-              <p className="text-slate-500 text-sm">{s.desc}</p>
+            <div key={i} className="text-center">
+              <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                {s.icon}
+              </div>
+              <div className="text-blue-600 text-xs font-black tracking-widest mb-2">{s.step}</div>
+              <div className="font-black text-lg mb-2">{s.title}</div>
+              <div className="text-slate-500 text-sm leading-relaxed">{s.desc}</div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* TRUST */}
-      <section className="bg-slate-50 py-16">
+      {/* WHY JAPAN */}
+      <section className="bg-slate-50 py-20">
         <div className="max-w-4xl mx-auto px-6">
-          <div className="grid md:grid-cols-3 gap-6 text-center">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-black mb-3">Why Japan?</h2>
+            <p className="text-slate-500 text-sm max-w-xl mx-auto">
+              The yen is weak, stores are packed with inventory, and most foreign buyers don't speak Japanese.
+              That gap is your opportunity.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
             {[
-              { icon: <Globe size={24} className="text-blue-600 mx-auto mb-3" />, title: "Japanese-native monitoring", desc: "We read slang, context, and nuance — not just keywords." },
-              { icon: <Shield size={24} className="text-blue-600 mx-auto mb-3" />, title: "Privacy first", desc: "Your keywords are private. We never share client data." },
-              { icon: <Zap size={24} className="text-blue-600 mx-auto mb-3" />, title: "Actionable, not just data", desc: "Every report includes a recommended action. Not just raw data." },
-            ].map((t, i) => (
-              <div key={i} className="bg-white rounded-2xl p-6 border border-slate-200">
-                {t.icon}
-                <h3 className="font-black mb-2 text-slate-900">{t.title}</h3>
-                <p className="text-slate-500 text-sm">{t.desc}</p>
+              {
+                stat: "2–5×",
+                label: "Average price premium on eBay vs. Japan",
+                note: "Retro games, figures, Pokemon cards",
+              },
+              {
+                stat: "¥149",
+                label: "USD/JPY rate — weakest yen in 30 years",
+                note: "Makes Japanese goods even cheaper in USD",
+              },
+              {
+                stat: "0",
+                label: "Japanese language needed",
+                note: "jpradar translates everything automatically",
+              },
+            ].map((s, i) => (
+              <div key={i} className="bg-white border border-slate-200 rounded-2xl p-6 text-center">
+                <div className="text-4xl font-black text-blue-600 mb-2">{s.stat}</div>
+                <div className="font-bold text-sm mb-1">{s.label}</div>
+                <div className="text-slate-400 text-xs">{s.note}</div>
               </div>
             ))}
           </div>
@@ -217,31 +326,75 @@ export default function HomePage() {
       </section>
 
       {/* PRICING */}
-      <section className="max-w-4xl mx-auto px-6 py-20">
-        <h2 className="text-3xl font-black text-center mb-3 text-slate-900">Simple pricing</h2>
-        <p className="text-slate-500 text-center mb-12">Less than one hour with a Japan market consultant.</p>
-        <div className="grid md:grid-cols-2 gap-6">
+      <section className="py-20 max-w-5xl mx-auto px-6">
+        <div className="text-center mb-14">
+          <h2 className="text-3xl font-black mb-3">Simple pricing</h2>
+          <p className="text-slate-500 text-sm">Start free. Upgrade when you're making money.</p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-6">
           {[
-            { name: "Starter", price: "$299", period: "/month", desc: "For teams exploring Japan", features: ["3 keywords monitored", "Weekly digest report", "Slack notification", "X JP + Note coverage", "Email support"], highlight: false },
-            { name: "Pro", price: "$799", period: "/month", desc: "For active Japan market players", features: ["10 keywords monitored", "Daily reports", "Real-time Slack alerts", "X JP + Note + 5ch", "Competitor tracking", "Priority support"], highlight: true },
-          ].map((p, i) => (
-            <div key={i} className={`rounded-2xl p-8 border-2 ${p.highlight ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white"}`}>
-              {p.highlight && <div className="text-xs font-black text-blue-600 uppercase tracking-widest mb-3">Most Popular</div>}
-              <h3 className="text-xl font-black mb-1 text-slate-900">{p.name}</h3>
-              <p className="text-slate-500 text-sm mb-4">{p.desc}</p>
-              <div className="mb-6">
-                <span className="text-4xl font-black text-slate-900">{p.price}</span>
-                <span className="text-slate-500 text-sm">{p.period}</span>
+            {
+              name: "Free",
+              price: "$0",
+              period: "/month",
+              desc: "Test the waters",
+              features: ["5 deal alerts/day", "Email notifications", "All categories", "7-day deal history"],
+              cta: "Start Free",
+              highlight: false,
+            },
+            {
+              name: "Hunter",
+              price: "$29",
+              period: "/month",
+              desc: "For active flippers",
+              features: ["Unlimited alerts", "Slack & Discord", "Category filters", "Min profit threshold", "30-day history"],
+              cta: "Start Hunting",
+              highlight: true,
+            },
+            {
+              name: "Pro",
+              price: "$79",
+              period: "/month",
+              desc: "For serious resellers",
+              features: ["Everything in Hunter", "Priority alerts (15 min)", "Multiple webhooks", "Profit analytics", "CSV export"],
+              cta: "Go Pro",
+              highlight: false,
+            },
+          ].map((plan, i) => (
+            <div
+              key={i}
+              className={`rounded-2xl p-6 border ${
+                plan.highlight
+                  ? "bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-200"
+                  : "bg-white border-slate-200"
+              }`}
+            >
+              <div className={`text-xs font-black uppercase tracking-widest mb-1 ${plan.highlight ? "text-blue-200" : "text-slate-400"}`}>
+                {plan.name}
               </div>
+              <div className="flex items-end gap-1 mb-1">
+                <span className="text-4xl font-black">{plan.price}</span>
+                <span className={`text-sm mb-1 ${plan.highlight ? "text-blue-200" : "text-slate-400"}`}>{plan.period}</span>
+              </div>
+              <div className={`text-sm mb-6 ${plan.highlight ? "text-blue-100" : "text-slate-500"}`}>{plan.desc}</div>
               <ul className="space-y-2 mb-8">
-                {p.features.map((f, fi) => (
-                  <li key={fi} className="flex items-center gap-2 text-sm text-slate-600">
-                    <CheckCircle size={14} className="text-green-500 flex-shrink-0" />{f}
+                {plan.features.map((f, j) => (
+                  <li key={j} className="flex items-center gap-2 text-sm">
+                    <CheckCircle size={14} className={plan.highlight ? "text-blue-200" : "text-emerald-500"} />
+                    {f}
                   </li>
                 ))}
               </ul>
-              <a href="#signup" className={`block text-center font-black py-3 rounded-xl transition-colors ${p.highlight ? "bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200" : "bg-slate-900 hover:bg-slate-800 text-white"}`}>
-                Start Free Beta
+              <a
+                href="#signup"
+                className={`block text-center font-bold py-3 rounded-xl transition-colors text-sm ${
+                  plan.highlight
+                    ? "bg-white text-blue-600 hover:bg-blue-50"
+                    : "bg-slate-900 text-white hover:bg-slate-700"
+                }`}
+              >
+                {plan.cta}
               </a>
             </div>
           ))}
@@ -249,67 +402,62 @@ export default function HomePage() {
       </section>
 
       {/* SIGNUP */}
-      <section id="signup" className="bg-slate-50 py-20">
-        <div className="max-w-xl mx-auto px-6">
-          <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center shadow-sm">
-            <FileText size={32} className="text-blue-600 mx-auto mb-4" />
-            <h2 className="text-3xl font-black mb-3 text-slate-900">Join the Beta</h2>
-            <p className="text-slate-500 mb-8">First 20 companies get 3 months free.</p>
+      <section id="signup" className="bg-slate-950 py-24">
+        <div className="max-w-xl mx-auto px-6 text-center">
+          <Zap size={32} className="text-blue-400 mx-auto mb-6" />
+          <h2 className="text-4xl font-black text-white mb-4">
+            Start finding deals today.
+          </h2>
+          <p className="text-slate-400 text-sm mb-10">
+            Join the waitlist. First 50 users get 3 months of Hunter free.
+          </p>
 
-            {submitted ? (
-              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
-                <CheckCircle size={48} className="text-green-500 mx-auto mb-4" />
-                <h3 className="text-xl font-black mb-2 text-slate-900">You're on the list!</h3>
-                <p className="text-slate-500 text-sm">We'll reach out within 24 hours to set up your keyword tracking.</p>
-              </motion.div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <input type="email" placeholder="your@company.com" value={email} onChange={e => setEmail(e.target.value)} required
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-colors" />
-                <input type="text" placeholder="Keyword to monitor (e.g. 'your brand', 'AI SaaS')" value={keyword} onChange={e => setKeyword(e.target.value)} required
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-colors" />
-                <button type="submit" disabled={loading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black py-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-lg shadow-lg shadow-blue-200">
-                  {loading ? "Submitting..." : <>Join Beta — Free <ArrowRight size={20} /></>}
-                </button>
-                <p className="text-slate-400 text-xs">No credit card required.</p>
-              </form>
-            )}
-          </div>
+          {submitted ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-emerald-900/30 border border-emerald-700 rounded-2xl p-8"
+            >
+              <CheckCircle size={32} className="text-emerald-400 mx-auto mb-3" />
+              <div className="text-white font-black text-xl mb-2">You're on the list.</div>
+              <div className="text-emerald-300 text-sm">We'll email you when your account is ready.</div>
+            </motion.div>
+          ) : (
+            <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                required
+                className="flex-1 bg-slate-800 border border-slate-700 text-white placeholder-slate-500 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors text-sm"
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-black px-6 py-3 rounded-xl transition-colors text-sm flex items-center gap-2 whitespace-nowrap justify-center"
+              >
+                {loading ? "Joining..." : "Get Early Access"} <ChevronRight size={16} />
+              </button>
+            </form>
+          )}
         </div>
       </section>
 
       {/* FOOTER */}
-      <footer className="border-t border-slate-200 py-10 px-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex flex-col md:flex-row justify-between items-start gap-6 mb-8">
-            <div>
-              <div className="font-black text-lg text-slate-900 mb-1">JP<span className="text-blue-600">RADAR</span></div>
-              <p className="text-slate-400 text-xs max-w-xs">AI-powered Japan social intelligence for global marketers. Publicly available data only.</p>
-            </div>
-            <div className="flex gap-8 text-sm">
-              <div>
-                <div className="font-bold text-slate-500 text-xs uppercase tracking-widest mb-2">Product</div>
-                <ul className="space-y-1">
-                  <li><a href="#signup" className="text-slate-400 hover:text-slate-700 transition-colors">Beta signup</a></li>
-                  <li><a href="/auth/login" className="text-slate-400 hover:text-slate-700 transition-colors">Login</a></li>
-                  <li><a href="/dashboard" className="text-slate-400 hover:text-slate-700 transition-colors">Dashboard</a></li>
-                </ul>
-              </div>
-              <div>
-                <div className="font-bold text-slate-500 text-xs uppercase tracking-widest mb-2">Legal</div>
-                <ul className="space-y-1">
-                  <li><a href="/legal/terms" className="text-slate-400 hover:text-slate-700 transition-colors">Terms of Service</a></li>
-                  <li><a href="/legal/privacy" className="text-slate-400 hover:text-slate-700 transition-colors">Privacy Policy</a></li>
-                </ul>
-              </div>
-            </div>
+      <footer className="border-t border-slate-100 py-8 px-6">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="font-black text-slate-900">
+            JP<span className="text-blue-600">RADAR</span>
           </div>
-          <div className="border-t border-slate-100 pt-6">
-            <p className="text-slate-400 text-xs text-center">© 2026 JPRADAR by <a href="https://wakaruai.net" className="hover:text-slate-600">WAKARUAI</a> · Reports are AI-generated summaries of publicly available information and are provided for informational purposes only. Not financial or business advice. · <a href="/legal/terms" className="hover:text-slate-600">Terms</a> · <a href="/legal/privacy" className="hover:text-slate-600">Privacy</a></p>
+          <div className="flex gap-6 text-sm text-slate-400">
+            <Link href="/legal/privacy" className="hover:text-slate-600 transition-colors">Privacy</Link>
+            <Link href="/legal/terms" className="hover:text-slate-600 transition-colors">Terms</Link>
+            <Link href="/auth/login" className="hover:text-slate-600 transition-colors">Login</Link>
           </div>
         </div>
       </footer>
+
     </div>
   );
 }

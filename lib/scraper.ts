@@ -82,17 +82,30 @@ function extractProducts(html: string, keyword: string): SurugayaProduct[] {
   return products;
 }
 
-export async function scrapeSurugaya(keyword: string): Promise<SurugayaProduct[]> {
-  const url = `https://www.suruga-ya.jp/search?category=&search_word=${encodeURIComponent(keyword)}&rankBy=new`;
-  const res = await fetch(url, {
+async function fetchHtml(targetUrl: string): Promise<string> {
+  const sbKey = process.env.SCRAPINGBEE_KEY;
+  if (sbKey) {
+    // Use Scrapingbee to bypass Cloudflare/IP blocks
+    const sbUrl = `https://app.scrapingbee.com/api/v1/?api_key=${sbKey}&url=${encodeURIComponent(targetUrl)}&render_js=false&premium_proxy=false`;
+    const res = await fetch(sbUrl);
+    if (!res.ok) throw new Error(`Scrapingbee HTTP ${res.status}`);
+    return res.text();
+  }
+  // Fallback: direct fetch (works locally, may 403 on Vercel)
+  const res = await fetch(targetUrl, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      'Accept-Language': 'ja,en;q=0.9',
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7',
     },
   });
-  if (!res.ok) throw new Error(`Surugaya HTTP ${res.status}`);
-  const html = await res.text();
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.text();
+}
+
+export async function scrapeSurugaya(keyword: string): Promise<SurugayaProduct[]> {
+  const url = `https://www.suruga-ya.jp/search?category=&search_word=${encodeURIComponent(keyword)}&rankBy=new`;
+  const html = await fetchHtml(url);
   return extractProducts(html, keyword);
 }
 

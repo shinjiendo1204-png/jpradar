@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStreamerInfo, getPastBroadcasts } from '@/lib/twitch';
+import { calcVFunction, calcCBIFromComments } from '@/lib/vfunction';
 
 /**
  * J-Clarity Streamer Analysis
@@ -130,26 +131,43 @@ export async function GET(req: NextRequest) {
       ? Math.round(broadcasts.reduce((s, b) => s + b.view_count, 0) / broadcasts.length)
       : 0;
 
+    // Genre fit detection
+    const titleText = broadcasts.map(b => b.title).join(' ').toLowerCase();
+    const gameKeywordsLower = gameName.toLowerCase().split(' ').filter(w => w.length > 2);
+    const genreFitScore = gameKeywordsLower.some(k => titleText.includes(k)) ? 1.0 : 0.3;
+
+    // Clips per broadcast (engagement proxy — estimate from view count)
+    const clipsPerBroadcast = avgViewCount > 10000 ? 3 : avgViewCount > 2000 ? 1 : 0.3;
+
+    // Review delta per stream (from correlation data)
+    const impactBroadcasts = broadcastsWithImpact.filter(b => b.review_delta_24h > 0);
+    const avgReviewDelta = impactBroadcasts.length > 0
+      ? impactBroadcasts.reduce((s, b) => s + b.review_delta_24h, 0) / impactBroadcasts.length
+      : 0.1;
+
+    // V-Function
+    const vResult = calcVFunction({
+      avg_view_count: avgViewCount,
+      clips_per_broadcast: clipsPerBroadcast,
+      review_delta_per_stream: avgReviewDelta,
+      genre_fit: genreFitScore,
+      peak_hour_bonus: 1.0,
+    });
+
     const avgInfluence = broadcastsWithImpact.length > 0
       ? Math.round(broadcastsWithImpact.reduce((s, b) => s + b.influence_score, 0) / broadcastsWithImpact.length * 10) / 10
       : 0;
 
     const bestBroadcast = broadcastsWithImpact.sort((a, b) => b.influence_score - a.influence_score)[0];
 
-    // Efficiency tier
-    let efficiencyTier: 'S' | 'A' | 'B' | 'C' | 'unknown' = 'unknown';
-    if (avgInfluence >= 8) efficiencyTier = 'S';
-    else if (avgInfluence >= 4) efficiencyTier = 'A';
-    else if (avgInfluence >= 1.5) efficiencyTier = 'B';
-    else if (avgInfluence >= 0) efficiencyTier = 'C';
-
     // Estimated cost (rough JP streamer rates)
-    const estimatedCostJpy = avgViewCount < 1000 ? 50000
-      : avgViewCount < 5000 ? 150000
-      : avgViewCount < 20000 ? 500000
-      : 1500000;
+    const estimatedCostJpy = avgViewCount < 500 ? 30000
+      : avgViewCount < 2000 ? 100000
+      : avgViewCount < 10000 ? 300000
+      : avgViewCount < 50000 ? 800000
+      : 2000000;
 
-    const estimatedPurchases = estimatePurchases(avgViewCount, avgInfluence);
+    const estimatedPurchases = vResult.estimated_purchases_per_stream;
 
     // CPP = Cost Per Purchase
     const costPerPurchase = estimatedPurchases.mid > 0
@@ -166,13 +184,27 @@ export async function GET(req: NextRequest) {
         broadcaster_type: streamer.broadcaster_type,
         twitch_url: `https://www.twitch.tv/${streamer.login}`,
       },
+      // V-Function score
+      v_function: {
+        v_score: vResult.v_score,
+        tier: vResult.tier,
+        cbi_index: vResult.cbi_index,
+        interpretation: vResult.interpretation,
+        components: {
+          reach: vResult.reach_component,
+          engagement: vResult.engagement_component,
+          conversion: vResult.conversion_component,
+          fit: vResult.fit_component,
+        },
+      },
       game_analysis: {
         game_name: gameName,
         relevant_broadcasts: broadcastsWithImpact.length,
         avg_view_count: avgViewCount,
         avg_influence_score: avgInfluence,
-        efficiency_tier: efficiencyTier,
+        efficiency_tier: vResult.tier,
         best_broadcast: bestBroadcast || null,
+        lag_curve_url: steamId ? `/api/clarity/lagcurve?steam_id=${steamId}&game_name=${encodeURIComponent(gameName)}&streamer=${streamer.login}` : null,
       },
       roi_estimate: {
         estimated_cost_jpy: estimatedCostJpy,

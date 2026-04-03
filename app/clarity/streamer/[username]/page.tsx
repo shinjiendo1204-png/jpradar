@@ -16,6 +16,13 @@ interface StreamerAnalysis {
     broadcaster_type: string;
     twitch_url: string;
   };
+  v_function: {
+    v_score: number;
+    tier: 'S' | 'A' | 'B' | 'C';
+    cbi_index: number;
+    interpretation: string;
+    components: { reach: number; engagement: number; conversion: number; fit: number };
+  };
   game_analysis: {
     game_name: string;
     relevant_broadcasts: number;
@@ -23,6 +30,7 @@ interface StreamerAnalysis {
     avg_influence_score: number;
     efficiency_tier: 'S' | 'A' | 'B' | 'C' | 'unknown';
     best_broadcast: any;
+    lag_curve_url: string | null;
   };
   roi_estimate: {
     estimated_cost_jpy: number;
@@ -85,7 +93,8 @@ export default function StreamerPage() {
     </div>
   );
 
-  const tier = TIER_CONFIG[data.game_analysis.efficiency_tier];
+  const tierKey = data.v_function?.tier || data.game_analysis.efficiency_tier || 'unknown';
+  const tier = TIER_CONFIG[tierKey as keyof typeof TIER_CONFIG] || TIER_CONFIG.unknown;
   const { roi_estimate: roi } = data;
 
   return (
@@ -129,21 +138,62 @@ export default function StreamerPage() {
           </div>
         </div>
 
-        {/* Efficiency tier */}
-        <div className={`rounded-2xl p-6 border ${tier.bg}`}>
-          <div className="flex items-center gap-4">
-            <div className={`text-4xl font-black ${tier.color}`}>
-              {data.game_analysis.efficiency_tier}
+        {/* V-Function Score */}
+        {data.v_function && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h3 className="font-black text-lg">V-Score (Purchasing Power)</h3>
+                <p className="text-slate-400 text-xs mt-0.5">{data.v_function.interpretation}</p>
+              </div>
+              <div className={`text-5xl font-black ${tier.color}`}>{data.v_function.v_score}</div>
             </div>
-            <div>
-              <div className={`font-black text-lg ${tier.color}`}>{tier.label}</div>
-              <div className="text-slate-500 text-sm">{tier.desc}</div>
-              {gameName && (
-                <div className="text-slate-400 text-xs mt-1">
-                  Based on {data.game_analysis.relevant_broadcasts} broadcasts of <strong>{gameName}</strong>
+
+            {/* Component bars */}
+            <div className="space-y-3 mb-5">
+              {[
+                { label: 'Reach', value: data.v_function.components.reach, max: 5, color: 'bg-blue-500' },
+                { label: 'Engagement', value: data.v_function.components.engagement, max: 5, color: 'bg-purple-500' },
+                { label: 'Conversion', value: data.v_function.components.conversion, max: 5, color: 'bg-emerald-500' },
+                { label: 'Genre Fit', value: data.v_function.components.fit, max: 5, color: 'bg-orange-500' },
+              ].map((c, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-slate-500 w-20 shrink-0">{c.label}</span>
+                  <div className="flex-1 bg-slate-100 rounded-full h-4 overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.min((c.value / c.max) * 100, 100)}%` }}
+                      transition={{ delay: i * 0.1, duration: 0.6 }}
+                      className={`h-full ${c.color} rounded-full`}
+                    />
+                  </div>
+                  <span className="text-xs font-bold text-slate-600 w-8 text-right">{c.value.toFixed(1)}</span>
                 </div>
-              )}
+              ))}
             </div>
+
+            {/* CBI */}
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-sm">CBI — Chat Buy-Intent Index</div>
+                  <div className="text-slate-400 text-xs">Purchase signals extracted from chat activity</div>
+                </div>
+                <div className={`text-2xl font-black ${
+                  data.v_function.cbi_index >= 60 ? 'text-emerald-600' :
+                  data.v_function.cbi_index >= 30 ? 'text-yellow-600' : 'text-slate-400'
+                }`}>{data.v_function.cbi_index}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Efficiency tier badge */}
+        <div className={`rounded-2xl p-4 border ${tier.bg} flex items-center gap-4`}>
+          <div className={`text-3xl font-black ${tier.color}`}>{data.v_function?.tier || data.game_analysis.efficiency_tier}</div>
+          <div>
+            <div className={`font-black ${tier.color}`}>{tier.label}</div>
+            <div className="text-slate-500 text-sm">{tier.desc}</div>
           </div>
         </div>
 

@@ -1,33 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import {
+  scrapeSurugaya,
+  getEbaySoldPrice,
+  getExchangeRate,
+  translateToEnglish,
+} from '@/lib/scraper';
 
 /**
- * Main scan cron job.
- * Scrapes Japanese used markets, calculates profit, saves deals, sends notifications.
- *
- * Schedule (vercel.json): every 2 hours
- * { "crons": [{ "path": "/api/cron/scan", "schedule": "0-every-2h" -- see vercel.json
- *
+ * Main scan cron job — runs daily (Vercel Hobby plan).
+ * Directly imports scraper functions instead of internal HTTP calls.
  * Auth: POST with Authorization: Bearer {CRON_SECRET}
  */
 
-// Keywords to scan with their categories
 const SCAN_TARGETS = [
   { keyword: 'レトロゲーム', category: 'game' },
   { keyword: 'ゲームソフト ファミコン', category: 'game' },
   { keyword: 'ゲームボーイ ソフト', category: 'game' },
   { keyword: 'スーパーファミコン ソフト', category: 'game' },
-  { keyword: 'プレイステーション ソフト', category: 'game' },
   { keyword: 'フィギュア 限定', category: 'figure' },
   { keyword: 'トレーディングカード ポケモン', category: 'card' },
 ] as const;
 
-const MIN_PROFIT_TO_SAVE = 15; // USD
-const MAX_PRODUCTS_PER_KEYWORD = 5;
-const CRAWL_DELAY_MS = 31000; // Respect surugaya's 30s crawl-delay
+const WEIGHT: Record<string, number> = {
+  game: 400, card: 100, figure: 800, brand: 600, electronics: 1000, other: 500,
+};
+
+const SHIPPING_BASE = 2500;
+const SHIPPING_PER_100G = 200;
+const EBAY_FEE = 0.13;
+const MIN_PROFIT = 15;
+
+function estimateShipping(category: string): number {
+  const w = WEIGHT[category] || 500;
+  return SHIPPING_BASE + Math.ceil(w / 100) * SHIPPING_PER_100G;
+}
 
 export async function POST(req: NextRequest) {
-  // Verify cron secret
   const authHeader = req.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -38,8 +47,6 @@ export async function POST(req: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://jpradar.app';
-
   const results = {
     scanned: 0,
     deals_found: 0,
@@ -48,118 +55,142 @@ export async function POST(req: NextRequest) {
     started_at: new Date().toISOString(),
   };
 
+  // Get exchange rate once
+  const exchangeRate = await getExchangeRate();
+
   for (const target of SCAN_TARGETS) {
     try {
-      // 1. Scrape surugaya
-      const scrapeRes = await fetch(
-        `${baseUrl}/api/scrape/surugaya?keyword=${encodeURIComponent(target.keyword)}`,
-        { headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` } }
-      );
-
-      if (!scrapeRes.ok) {
-        results.errors.push(`Scrape failed for ${target.keyword}: ${scrapeRes.status}`);
-        continue;
-      }
-
-      const { products } = await scrapeRes.json();
-      if (!products?.length) continue;
-
+      const products = await scrapeSurugaya(target.keyword);
       results.scanned += products.length;
-      const sample = products.slice(0, MAX_PRODUCTS_PER_KEYWORD);
 
-      // 2. Calculate profit for each product
-      for (const product of sample) {
+      for (const product of products.slice(0, 5)) {
         try {
-          const calcRes = await fetch(`${baseUrl}/api/deals/calculate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              title_ja: product.title_ja,
-              price_jpy: product.price_jpy,
-              category: target.category,
-              destination: 'US',
-            }),
-          });
+          // Translate and look up eBay price in parallel
+          const [titleEn, ebayPrice] = await Promise.all([
+            translateToEnglish(product.title_ja),
+            getEbaySoldPrice(product.title_ja), // try Japanese first
+          ]);
 
-          if (!calcRes.ok) continue;
-          const deal = await calcRes.json();
+          // If Japanese search returned nothing, try English
+          const finalPrice = ebayPrice > 0
+            ? ebayPrice
+            : await getEbaySoldPrice(titleEn);
 
-          // 3. Only save if profitable enough
-          if (!deal.net_profit_usd || deal.net_profit_usd < MIN_PROFIT_TO_SAVE) continue;
+          if (finalPrice === 0) continue;
 
-          // 4. Save deal to DB
+          const shippingJpy = estimateShipping(target.category);
+          const totalCostUsd = (product.price_jpy + shippingJpy) * exchangeRate;
+          const netProfitUsd = finalPrice * (1 - EBAY_FEE) - totalCostUsd;
+
+          if (netProfitUsd < MIN_PROFIT) continue;
+
+          const profitMarginPct = Math.round((netProfitUsd / (finalPrice * 0.87)) * 1000) / 10;
+
+          // Save deal
           const { data: savedDeal, error: dbError } = await supabase
             .from('deals')
             .insert({
               title_ja: product.title_ja,
-              title_en: deal.title_en,
+              title_en: titleEn,
               source: 'surugaya',
               source_url: product.url,
               image_url: product.image_url || null,
               buy_price_jpy: product.price_jpy,
-              shipping_estimate_jpy: deal.shipping_estimate_jpy,
-              ebay_sell_price_usd: deal.ebay_sell_price_usd,
-              net_profit_usd: deal.net_profit_usd,
-              profit_margin_pct: deal.profit_margin_pct,
+              shipping_estimate_jpy: shippingJpy,
+              ebay_sell_price_usd: Math.round(finalPrice * 100) / 100,
+              net_profit_usd: Math.round(netProfitUsd * 100) / 100,
+              profit_margin_pct: profitMarginPct,
               category: target.category,
             })
             .select()
             .single();
 
           if (dbError) {
-            results.errors.push(`DB insert error: ${dbError.message}`);
+            results.errors.push(`DB: ${dbError.message}`);
             continue;
           }
 
           results.deals_found++;
 
-          // 5. Find matching user alerts
+          // Notify matching users
           const { data: alerts } = await supabase
             .from('alerts')
             .select('*')
             .eq('is_active', true)
-            .lte('min_profit_usd', deal.net_profit_usd);
+            .lte('min_profit_usd', netProfitUsd);
 
           for (const alert of (alerts || [])) {
-            // Filter by category if set
             if (alert.category && alert.category !== target.category) continue;
-
             const webhookUrl = alert.slack_webhook_url || alert.discord_webhook_url;
             if (!webhookUrl) continue;
 
-            const webhookType = alert.slack_webhook_url ? 'slack' : 'discord';
+            const isDiscord = !!alert.discord_webhook_url;
+            const tierEmoji = netProfitUsd >= 80 ? '🔥' : netProfitUsd >= 30 ? '💚' : '🟡';
+            const ebaySearchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(titleEn)}&LH_Sold=1`;
+
+            const payload = isDiscord ? {
+              embeds: [{
+                title: `${tierEmoji} ${titleEn}`,
+                description: `*JP: ${product.title_ja}*`,
+                color: netProfitUsd >= 80 ? 0xFF4444 : netProfitUsd >= 30 ? 0x00C851 : 0xFFD700,
+                fields: [
+                  { name: '💴 Buy', value: `¥${product.price_jpy.toLocaleString()}`, inline: true },
+                  { name: '📦 Ship', value: `¥${shippingJpy.toLocaleString()}`, inline: true },
+                  { name: '💰 Sell on eBay', value: `~$${finalPrice.toFixed(0)}`, inline: true },
+                  { name: '✅ Net Profit', value: `**$${netProfitUsd.toFixed(0)}**`, inline: true },
+                  { name: '📈 Margin', value: `${profitMarginPct}%`, inline: true },
+                ],
+                footer: { text: 'jpradar • Japan Arbitrage Scanner' },
+                timestamp: new Date().toISOString(),
+              }],
+              components: [{
+                type: 1,
+                components: [
+                  { type: 2, style: 5, label: '🛒 View Product', url: product.url },
+                  { type: 2, style: 5, label: '🔍 Check eBay', url: ebaySearchUrl },
+                ],
+              }],
+            } : {
+              blocks: [
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `${tierEmoji} *${titleEn}*\n_JP: ${product.title_ja}_\n\n💴 Buy ¥${product.price_jpy.toLocaleString()} → 💰 Sell ~$${finalPrice.toFixed(0)} → ✅ *Net $${netProfitUsd.toFixed(0)} (${profitMarginPct}%)*`,
+                  },
+                },
+                {
+                  type: 'actions',
+                  elements: [
+                    { type: 'button', text: { type: 'plain_text', text: '🛒 View Product' }, url: product.url, style: 'primary' },
+                    { type: 'button', text: { type: 'plain_text', text: '🔍 Check eBay' }, url: ebaySearchUrl },
+                  ],
+                },
+              ],
+            };
 
             try {
-              await fetch(`${baseUrl}/api/notify/slack`, {
+              await fetch(webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  webhook_url: webhookUrl,
-                  webhook_type: webhookType,
-                  deal: {
-                    ...deal,
-                    source_url: product.url,
-                    image_url: product.image_url,
-                  },
-                }),
+                body: JSON.stringify(payload),
               });
               results.notifications_sent++;
-            } catch (notifyErr: any) {
-              results.errors.push(`Notify error: ${notifyErr.message}`);
+            } catch (e: any) {
+              results.errors.push(`Notify: ${e.message}`);
             }
           }
 
-          // Small delay between products to be respectful
-          await new Promise(r => setTimeout(r, 1000));
-        } catch (productErr: any) {
-          results.errors.push(`Product error: ${productErr.message}`);
+          await new Promise(r => setTimeout(r, 500));
+        } catch (e: any) {
+          results.errors.push(`Product: ${e.message}`);
         }
       }
 
-      // Respect surugaya's 30s crawl-delay between keyword searches
-      await new Promise(r => setTimeout(r, CRAWL_DELAY_MS));
-    } catch (keywordErr: any) {
-      results.errors.push(`Keyword "${target.keyword}" error: ${keywordErr.message}`);
+      // Respect crawl-delay between keywords
+      await new Promise(r => setTimeout(r, 32000));
+    } catch (e: any) {
+      results.errors.push(`Keyword "${target.keyword}": ${e.message}`);
     }
   }
 

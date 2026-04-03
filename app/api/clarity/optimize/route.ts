@@ -93,8 +93,19 @@ export async function POST(req: NextRequest) {
         // Estimate clips per broadcast (proxy for engagement)
         const clipsPerBroadcast = avgViews > 10000 ? 3 : avgViews > 2000 ? 1 : 0.3;
 
-        // Estimate review delta per stream
-        const reviewDeltaPerStream = Math.max(0.1, avgDailyReviews * 0.01 * (genreFit > 0.5 ? 2 : 1));
+        // Get actual Lag Curve data for this streamer
+        let reviewDeltaPerStream = 0.1; // default: no evidence
+        try {
+          const lagRes = await fetch(
+            `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.jprader.net'}/api/clarity/lagcurve?steam_id=${steam_id}&game_name=${encodeURIComponent(game_name)}&streamer=${stream.user_name}`
+          );
+          if (lagRes.ok) {
+            const lagData = await lagRes.json();
+            reviewDeltaPerStream = Math.max(0.1, lagData.avg_attributed_reviews_per_stream || 0.1);
+          }
+        } catch {
+          reviewDeltaPerStream = 0.1;
+        }
 
         const vResult = calcVFunction({
           avg_view_count: avgViews,

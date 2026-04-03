@@ -66,18 +66,33 @@ export async function GET(req: NextRequest) {
       .filter(d => d.total >= peakThreshold)
       .map(d => d.dateStr);
 
-    // For each broadcast, check if there's a review spike within 48h
+    // For each broadcast, check review delta vs baseline in next 48h
+    const baselineReviews = avgTotal; // typical daily reviews without broadcast
+
     const broadcastImpacts = broadcastEvents.map(b => {
       const broadcastDate = new Date(b.date);
-      const spikeDays = [];
+      const spikeDays: any[] = [];
+
       for (let h = 0; h <= 48; h += 24) {
         const checkDate = new Date(broadcastDate.getTime() + h * 3600000);
         const dateStr = checkDate.toISOString().split('T')[0];
         const dayData = steamData.find(d => d.dateStr === dateStr);
-        if (dayData && dayData.total >= peakThreshold) {
-          spikeDays.push({ dateStr, reviews: dayData.total, hours_after: h });
+        if (dayData) {
+          // Delta = actual - baseline
+          const delta = dayData.total - baselineReviews;
+          if (delta > 0 && dayData.total >= peakThreshold) {
+            spikeDays.push({
+              dateStr,
+              reviews: dayData.total,
+              delta: Math.round(delta),
+              hours_after: h,
+            });
+          }
         }
       }
+
+      const maxDelta = spikeDays.reduce((m, s) => Math.max(m, s.delta), 0);
+
       return {
         broadcast_date: b.date,
         title: b.title,
@@ -86,6 +101,10 @@ export async function GET(req: NextRequest) {
         caused_spike: spikeDays.length > 0,
         spike_data: spikeDays,
         lag_hours: spikeDays.length > 0 ? spikeDays[0].hours_after : null,
+        attributed_reviews: maxDelta,  // extra reviews above baseline
+        attribution_rate: b.view_count > 0
+          ? Math.round((maxDelta / b.view_count) * 10000) / 100  // % of viewers who reviewed
+          : 0,
       };
     });
 
@@ -100,24 +119,32 @@ export async function GET(req: NextRequest) {
       : avgLag <= 24 ? 'same_day'           // 6-24h: same day decision
       : 'delayed';                           // 24-48h: word-of-mouth / slow burn
 
+    // Calculate avg attributed reviews per broadcast
+    const impactBroadcasts = broadcastImpacts.filter(b => b.caused_spike);
+    const avgAttributedReviews = impactBroadcasts.length > 0
+      ? Math.round(impactBroadcasts.reduce((s, b) => s + b.attributed_reviews, 0) / impactBroadcasts.length)
+      : 0;
+
+    const avgAttributionRate = impactBroadcasts.length > 0
+      ? Math.round(impactBroadcasts.reduce((s, b) => s + b.attribution_rate, 0) / impactBroadcasts.length * 100) / 100
+      : 0;
+
     return NextResponse.json({
       steam_id: steamId,
       game_name: gameName,
       streamer: streamerUsername || null,
-      // Chart data: daily reviews for last 60 days
       review_timeline: steamData.slice(-60).map(d => ({
         date: d.dateStr,
         reviews: d.total,
+        baseline: Math.round(avgTotal),
         is_peak: d.total >= peakThreshold,
       })),
-      // Broadcast markers
       broadcast_events: broadcastEvents.slice(0, 20),
-      // Impact analysis
-      broadcast_impacts: broadcastImpacts.filter(b => b.caused_spike).slice(0, 5),
-      peak_days: peakDays.slice(-30),
-      avg_daily_reviews: Math.round(avgTotal),
-      peak_threshold: Math.round(peakThreshold),
-      // Conversion type
+      broadcast_impacts: impactBroadcasts.slice(0, 5),
+      // Summary
+      avg_daily_reviews_baseline: Math.round(avgTotal),
+      avg_attributed_reviews_per_stream: avgAttributedReviews,
+      avg_attribution_rate_pct: avgAttributionRate,
       conversion_type: conversionType,
       conversion_type_label: conversionType === 'impulse_buyer' ? '⚡ Impulse Buyer Driver (< 6h)' :
                              conversionType === 'same_day' ? '📅 Same-Day Converter (6–24h)' :

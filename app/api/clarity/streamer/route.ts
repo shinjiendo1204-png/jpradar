@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStreamerInfo, getPastBroadcasts } from '@/lib/twitch';
-import { calcVFunction, assignPercentiles } from '@/lib/vfunction';
+import { calcVFunction } from '@/lib/vfunction';
+import { calcIncrementality, aggregateIncrementality } from '@/lib/incrementality';
 
 /**
  * J-Clarity Streamer Analysis
@@ -201,18 +202,34 @@ export async function GET(req: NextRequest) {
     // Based on industry data: JP top tier ~¥2M/stream, mid tier ~¥300-500k
     // WSJ: global top = $50k/hour = ~¥7M, JP top = ~¥2M estimated
     const estimatedCostJpy =
-      avgViewCount < 200   ? 20000      // micro: ¥20k
-      : avgViewCount < 500 ? 50000      // small: ¥50k
-      : avgViewCount < 1000 ? 100000    // ¥100k
-      : avgViewCount < 3000 ? 200000    // ¥200k
-      : avgViewCount < 10000 ? 500000   // ¥500k
-      : avgViewCount < 30000 ? 1000000  // ¥1M
-      : avgViewCount < 100000 ? 2000000 // ¥2M (JP top tier)
-      : 5000000;                         // ¥5M+ (mega tier)
+      avgViewCount < 200   ? 20000
+      : avgViewCount < 500 ? 50000
+      : avgViewCount < 1000 ? 100000
+      : avgViewCount < 3000 ? 200000
+      : avgViewCount < 10000 ? 500000
+      : avgViewCount < 30000 ? 1000000
+      : avgViewCount < 100000 ? 2000000
+      : 5000000;
 
-    const costPerPurchase = vResult.estimated_purchases_per_stream.mid > 0
-      ? Math.round(estimatedCostJpy / vResult.estimated_purchases_per_stream.mid)
-      : null;
+    // Build review timeline for incrementality analysis
+    const reviewTimeline = steamDaily.map(d => ({
+      date: new Date(d.date * 1000).toISOString().split('T')[0],
+      timestamp: d.date,
+      total: d.up + d.down,
+      up: d.up,
+      down: d.down,
+    }));
+
+    // Calculate incrementality for each broadcast that has game content
+    const incrementalityResults = gameBroadcasts.slice(0, 10).map(b =>
+      calcIncrementality(
+        reviewTimeline,
+        { date: b.created_at, view_count: estimateAvgConcurrent(b.view_count), title: b.title, url: `https://www.twitch.tv/videos/${b.id}` },
+        1 // concurrent streamers (simplified)
+      )
+    );
+
+    const aggregatedIncrementality = aggregateIncrementality(incrementalityResults);
 
     return NextResponse.json({
       streamer: {
@@ -258,13 +275,28 @@ export async function GET(req: NextRequest) {
           ? `/api/clarity/lagcurve?steam_id=${steamId}&game_name=${encodeURIComponent(gameName)}&streamer=${streamer.login}`
           : null,
       },
-      roi_estimate: {
+      // Incrementality (replaces ROI)
+      incrementality: {
+        ...aggregatedIncrementality,
+        per_broadcast: incrementalityResults.slice(0, 3).map(r => ({
+          lift_ratio: r.lift_ratio,
+          lift_label: r.lift_label,
+          incremental_reviews: r.incremental_reviews,
+          confidence_band: r.confidence_band,
+          lag_label: r.lag_label,
+          best_use: r.best_use,
+          vs_baseline_label: r.vs_baseline_label,
+        })),
+      },
+      // Cost efficiency (replaces ROI framing)
+      cost_efficiency: {
         estimated_cost_jpy: estimatedCostJpy,
-        estimated_purchases: vResult.estimated_purchases_per_stream,
-        cost_per_purchase_jpy: costPerPurchase,
-        roi_note: costPerPurchase
-          ? `¥${costPerPurchase.toLocaleString()} per purchase (estimated)`
-          : 'Run a test campaign to get real conversion data',
+        incremental_reviews_expected: aggregatedIncrementality.avg_incremental,
+        cost_per_incremental_review: aggregatedIncrementality.avg_incremental > 0
+          ? Math.round(estimatedCostJpy / aggregatedIncrementality.avg_incremental)
+          : null,
+        strategic_recommendation: aggregatedIncrementality.best_use,
+        note: '* Incremental = reviews that would NOT have happened without this streamer',
       },
       recent_broadcasts: recentBroadcasts.slice(0, 5).map(b => ({
         title: b.title,

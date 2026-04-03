@@ -39,11 +39,29 @@ interface StreamerData {
     conversion_evidence: number;
     efficiency_tier: string;
   };
-  roi_estimate: {
+  incrementality: {
+    avg_incremental: number;
+    avg_lift_ratio: number;
+    confidence_band: string;
+    dominant_lag: string;
+    best_use: string;
+    sample_size: number;
+    per_broadcast: {
+      lift_ratio: number;
+      lift_label: string;
+      incremental_reviews: number;
+      confidence_band: string;
+      lag_label: string;
+      best_use: string;
+      vs_baseline_label: string;
+    }[];
+  };
+  cost_efficiency: {
     estimated_cost_jpy: number;
-    estimated_purchases: { low: number; mid: number; high: number };
-    cost_per_purchase_jpy: number | null;
-    roi_note: string;
+    incremental_reviews_expected: number;
+    cost_per_incremental_review: number | null;
+    strategic_recommendation: string;
+    note: string;
   };
   recent_broadcasts: {
     title: string;
@@ -112,7 +130,6 @@ export default function StreamerPage() {
   );
 
   const tier = TIER_STYLE[data.v_function.tier as keyof typeof TIER_STYLE] || TIER_STYLE.C;
-  const { roi_estimate: roi } = data;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -278,29 +295,81 @@ export default function StreamerPage() {
           </div>
         </div>
 
-        {/* ROI Estimate */}
+        {/* Incrementality Analysis (replaces ROI) */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5">
-          <h3 className="font-black text-base mb-4 flex items-center gap-2">
-            <DollarSign size={16} className="text-yellow-600" /> ROI Estimate
-          </h3>
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            {[
-              { label: 'Conservative', value: roi.estimated_purchases.low, highlight: false },
-              { label: 'Expected', value: roi.estimated_purchases.mid, highlight: true },
-              { label: 'Optimistic', value: roi.estimated_purchases.high, highlight: false },
-            ].map((s, i) => (
-              <div key={i} className={`rounded-xl p-4 text-center border ${s.highlight ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'}`}>
-                <div className={`text-2xl font-black ${s.highlight ? 'text-blue-700' : 'text-slate-700'}`}>~{s.value}</div>
-                <div className="text-sm font-bold text-slate-500">{s.label}</div>
-                <div className="text-slate-400 text-xs">purchases</div>
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="font-black text-base flex items-center gap-2">
+              <TrendingUp size={16} className="text-emerald-600" /> Incremental Impact
+            </h3>
+            <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">
+              {data.incrementality.sample_size} broadcasts analyzed
+            </span>
+          </div>
+          <p className="text-slate-400 text-xs mb-4">Reviews that would NOT have occurred without this streamer</p>
+
+          {data.incrementality.avg_incremental === 0 ? (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-center">
+              <p className="text-yellow-700 font-bold text-sm mb-1">🧪 No baseline data yet</p>
+              <p className="text-yellow-600 text-xs">This streamer hasn't covered {data.game_analysis.game_name} in the data window. Run a test campaign to measure real incremental impact.</p>
+            </div>
+          ) : (
+            <>
+              {/* Key metric */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-4">
+                <div className="text-center">
+                  <div className="text-4xl font-black text-emerald-700">+{data.incrementality.avg_incremental}</div>
+                  <div className="text-emerald-600 font-bold text-sm">avg incremental reviews per stream</div>
+                  <div className="text-emerald-500 text-xs mt-1">{data.incrementality.confidence_band}</div>
+                </div>
               </div>
-            ))}
+
+              {/* Lift ratio */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-slate-50 rounded-xl p-3 text-center">
+                  <div className="text-2xl font-black text-slate-700">{data.incrementality.avg_lift_ratio.toFixed(1)}×</div>
+                  <div className="text-slate-500 text-xs">avg lift vs baseline</div>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-3 text-center">
+                  <div className="text-2xl font-black text-slate-700">
+                    {data.cost_efficiency.cost_per_incremental_review
+                      ? `¥${Math.round(data.cost_efficiency.cost_per_incremental_review / 1000)}k`
+                      : '—'}
+                  </div>
+                  <div className="text-slate-500 text-xs">cost / incremental review</div>
+                </div>
+              </div>
+
+              {/* Strategic insight */}
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4">
+                <div className="font-bold text-sm text-blue-800 mb-1">🎯 Strategic Recommendation</div>
+                <div className="text-blue-700 text-sm">{data.incrementality.best_use}</div>
+              </div>
+
+              {/* Per-broadcast evidence */}
+              {data.incrementality.per_broadcast.filter(b => b.incremental_reviews > 0).length > 0 && (
+                <div>
+                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Evidence from past broadcasts</div>
+                  <div className="space-y-2">
+                    {data.incrementality.per_broadcast.filter(b => b.incremental_reviews > 0).map((b, i) => (
+                      <div key={i} className="bg-slate-50 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold text-emerald-700">{b.lift_label}</span>
+                          <span className="text-xs text-slate-500">{b.confidence_band}</span>
+                        </div>
+                        <div className="text-xs text-slate-400">{b.lag_label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Cost */}
+          <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between text-sm text-slate-500">
+            <span><strong>Est. sponsorship:</strong> ¥{data.cost_efficiency.estimated_cost_jpy.toLocaleString()}</span>
+            <span className="text-xs text-slate-400">{data.cost_efficiency.note}</span>
           </div>
-          <div className="bg-slate-50 rounded-xl p-3 text-sm text-slate-500 flex justify-between items-center">
-            <span><strong>Est. sponsorship:</strong> ¥{roi.estimated_cost_jpy.toLocaleString()}</span>
-            <span><strong>Cost/purchase:</strong> {roi.cost_per_purchase_jpy ? `¥${roi.cost_per_purchase_jpy.toLocaleString()}` : '—'}</span>
-          </div>
-          <p className="text-xs text-slate-400 mt-2">* Estimates based on historical broadcast patterns. ±50% variance expected.</p>
         </div>
 
         {/* Recent broadcasts */}

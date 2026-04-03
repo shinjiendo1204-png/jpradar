@@ -66,8 +66,9 @@ export async function GET(req: NextRequest) {
       .filter(d => d.total >= peakThreshold)
       .map(d => d.dateStr);
 
-    // For each broadcast, check review delta vs baseline in next 48h
-    const baselineReviews = avgTotal; // typical daily reviews without broadcast
+    // Track attributed dates to avoid double counting across overlapping broadcasts
+    const attributedDates = new Set<string>();
+    const baselineReviews = avgTotal;
 
     const broadcastImpacts = broadcastEvents.map(b => {
       const broadcastDate = new Date(b.date);
@@ -77,8 +78,7 @@ export async function GET(req: NextRequest) {
         const checkDate = new Date(broadcastDate.getTime() + h * 3600000);
         const dateStr = checkDate.toISOString().split('T')[0];
         const dayData = steamData.find(d => d.dateStr === dateStr);
-        if (dayData) {
-          // Delta = actual - baseline
+        if (dayData && !attributedDates.has(dateStr)) {
           const delta = dayData.total - baselineReviews;
           if (delta > 0 && dayData.total >= peakThreshold) {
             spikeDays.push({
@@ -87,6 +87,7 @@ export async function GET(req: NextRequest) {
               delta: Math.round(delta),
               hours_after: h,
             });
+            attributedDates.add(dateStr); // mark as used
           }
         }
       }

@@ -31,28 +31,53 @@ async function getSteamDailyReviews(steamId: string): Promise<{ date: number; up
   }
 }
 
+// Bilingual genre keywords (JP + EN)
 const GENRE_MAP: Record<string, string[]> = {
-  'FPS / Shooter':    ['counter-strike', 'valorant', 'overwatch', 'apex', 'call of duty', 'battlefield'],
-  'Survival':         ['valheim', 'rust', 'ark', 'dayz', 'subnautica'],
-  'RPG / JRPG':       ['final fantasy', 'dragon quest', 'elden ring', 'persona', 'monster hunter'],
-  'Battle Royale':    ['pubg', 'fortnite', 'warzone', 'battlegrounds'],
-  'Horror':           ['resident evil', 'silent hill', 'phasmophobia', 'dead by daylight'],
-  'Card / Strategy':  ['hearthstone', 'shadowverse', 'slay the spire', 'civilization'],
-  'Just Chatting':    ['just chatting', '雑談', 'zatsudan'],
-  'Sports / Racing':  ['fifa', 'pes', 'nba', 'gran turismo', 'f1'],
+  'FPS / Shooter':    ['counter-strike', 'cs2', 'valorant', 'overwatch', 'apex', 'call of duty', 'cod', 'battlefield', 'r6', 'rainbow six', 'タルコフ', 'エスケープ', 'fps'],
+  'Survival':         ['valheim', 'rust', 'ark', 'dayz', 'subnautica', 'マインクラフト', 'minecraft', 'pal world', 'パルワールド', 'terraria'],
+  'RPG / JRPG':       ['final fantasy', 'ファイナルファンタジー', 'ff', 'dragon quest', 'ドラクエ', 'elden ring', 'エルデン', 'persona', 'ペルソナ', 'monster hunter', 'モンハン', 'mhw', 'ポケモン', 'pokemon'],
+  'Battle Royale':    ['pubg', 'fortnite', 'フォートナイト', 'warzone', 'battlegrounds', 'バトロワ'],
+  'Horror':           ['resident evil', 'バイオハザード', 'silent hill', 'phasmophobia', 'ファズモ', 'dead by daylight', 'dbd', 'horror', 'ホラー'],
+  'Card / Strategy':  ['hearthstone', 'shadowverse', 'シャドバ', 'slay the spire', 'civilization', 'シヴィライゼーション', 'mtg', 'マジック'],
+  'Just Chatting':    ['just chatting', '雑談', 'zatsudan', '話', 'トーク', 'ゲーム以外', '配信', '雑'],
+  'Sports / Racing':  ['fifa', 'pes', 'ウイイレ', 'nba', 'gran turismo', 'グランツーリスモ', 'f1', 'rocket league', 'ロケリ'],
+  'Action / Adventure': ['gta', 'グランド・セフト・オート', 'rdr', 'アサシン', 'assassin', 'god of war', 'ゴッド・オブ・ウォー', 'spiderman', 'batman'],
+  'MOBA / Online':    ['league of legends', 'lol', 'リーグ・オブ・レジェンド', 'dota', 'smite', 'ff14', 'ffxiv', 'ファイナルファンタジー１４'],
 };
 
-function detectGenresFromTitles(titles: string[]): { genre: string; count: number; ratio: number }[] {
-  const text = titles.join(' ').toLowerCase();
-  const total = titles.length || 1;
-  return Object.entries(GENRE_MAP)
-    .map(([genre, kws]) => {
-      const count = titles.filter(t => kws.some(k => t.toLowerCase().includes(k))).length;
-      return { genre, count, ratio: Math.round((count / total) * 100) };
-    })
-    .filter(g => g.count > 0)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 4);
+function detectGenresFromBroadcasts(broadcasts: { title: string; game_name?: string }[]): { genre: string; count: number; ratio: number }[] {
+  if (broadcasts.length === 0) return [];
+
+  const genreCounts: Record<string, number> = {};
+  let unmatched = 0;
+
+  for (const b of broadcasts) {
+    const text = (b.title + ' ' + (b.game_name || '')).toLowerCase();
+    let matched = false;
+    for (const [genre, kws] of Object.entries(GENRE_MAP)) {
+      if (kws.some(k => text.includes(k))) {
+        genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+        matched = true;
+        break; // one genre per broadcast
+      }
+    }
+    if (!matched) unmatched++;
+  }
+
+  const result = Object.entries(genreCounts)
+    .map(([genre, count]) => ({
+      genre,
+      count,
+      ratio: Math.round((count / broadcasts.length) * 100),
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  // Add "Other" if significant
+  if (unmatched > 0) {
+    result.push({ genre: 'Other', count: unmatched, ratio: Math.round((unmatched / broadcasts.length) * 100) });
+  }
+
+  return result;
 }
 
 export async function GET(req: NextRequest) {
@@ -113,8 +138,8 @@ export async function GET(req: NextRequest) {
       ? (recentBroadcasts.length / 4).toFixed(1) // 30 days ≈ 4 weeks
       : '0';
 
-    // Genre analysis from recent broadcasts
-    const genreBreakdown = detectGenresFromTitles(recentBroadcasts.map(b => b.title));
+    // Genre analysis from recent broadcasts (use title + game_name)
+    const genreBreakdown = detectGenresFromBroadcasts(recentBroadcasts);
 
     // Game-specific broadcasts
     const gameKeyword = gameName.toLowerCase().split(' ')[0];

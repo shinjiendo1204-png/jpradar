@@ -94,6 +94,8 @@ export default function ClarityPage() {
   const [ranking, setRanking] = useState<any>(null);
   const [trending, setTrending] = useState<any[]>([]);
   const [topStreamers, setTopStreamers] = useState<any[]>([]);
+  const [streamerGenre, setStreamerGenre] = useState('all');
+  const [streamerGenres, setStreamerGenres] = useState<string[]>([]);
   const [translations, setTranslations] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -110,20 +112,19 @@ export default function ClarityPage() {
   useEffect(() => {
     fetch('/api/clarity/trending')
       .then(r => r.json())
-      .then(d => {
-        const games = d.trending_jp_games || [];
-        setTrending(games);
-        // Load streamer ranking from top trending game
-        if (games.length > 0) {
-          const topGame = games[0];
-          fetch(`/api/clarity/ranking?steam_id=0&game_name=${encodeURIComponent(topGame.game_name)}`)
-            .then(r => r.json())
-            .then(rd => setTopStreamers((rd.streamers || []).slice(0, 8)))
-            .catch(() => {});
-        }
-      })
+      .then(d => setTrending(d.trending_jp_games || []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetch(`/api/clarity/jp-streamers?genre=${streamerGenre}`)
+      .then(r => r.json())
+      .then(d => {
+        setTopStreamers(d.streamers || []);
+        if (d.available_genres) setStreamerGenres(['all', ...d.available_genres]);
+      })
+      .catch(() => {});
+  }, [streamerGenre]);
 
   useEffect(() => {
     if (query.length < 2) { setSearchResults([]); setStreamerResults([]); return; }
@@ -304,32 +305,40 @@ export default function ClarityPage() {
               )}
             </div>
 
-            {/* Right: Top JP Streamers */}
+            {/* Right: Top JP Streamers by genre */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5">
-              <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2 mb-3">
                 <Users size={16} className="text-purple-600" />
-                <span className="font-black text-sm">Top JP Streamers Now</span>
-                <span className="text-xs text-slate-400 ml-auto">by viewers</span>
+                <span className="font-black text-sm">🇯🇵 JP Streamers Now</span>
+                <span className="text-xs text-slate-400 ml-auto">live</span>
+              </div>
+              {/* Genre filter */}
+              <div className="flex flex-wrap gap-1 mb-3">
+                {['all', 'FPS', 'RPG', 'Just Chatting', 'Survival', 'Horror'].map(g => (
+                  <button key={g} onClick={() => setStreamerGenre(g)}
+                    className={`text-xs px-2 py-1 rounded-full font-bold transition-colors border ${
+                      streamerGenre === g ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-slate-500 border-slate-200'
+                    }`}>
+                    {g === 'all' ? 'All' : g}
+                  </button>
+                ))}
               </div>
               {topStreamers.length === 0 ? (
-                <div className="text-slate-400 text-sm text-center py-8 animate-pulse">Loading...</div>
+                <div className="text-slate-400 text-sm text-center py-8 animate-pulse">Loading JP streamers...</div>
               ) : (
                 <div className="space-y-1">
-                  {topStreamers.map((s: any, i: number) => (
-                    <Link key={i} href={`/clarity/streamer/${s.username}`}
-                      className="flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-slate-50 transition-colors">
+                  {topStreamers.slice(0, 8).map((s: any, i: number) => (
+                    <Link key={i}
+                      href={`/clarity/streamer/${s.username}?live_viewers=${s.viewer_count}`}
+                      className="flex items-center gap-2 py-2 px-2 rounded-xl hover:bg-slate-50 transition-colors">
                       <span className="text-slate-300 font-black text-xs w-5">#{i+1}</span>
-                      {s.profile_image && <img src={s.profile_image} alt={s.username} className="w-7 h-7 rounded-full border border-slate-200 shrink-0" />}
                       <div className="flex-1 min-w-0">
-                        <div className="font-bold text-sm truncate flex items-center gap-1.5">
-                          {s.username}
-                          {s.language === 'ja' && <span className="text-xs">🇯🇵</span>}
-                        </div>
-                        <div className="text-slate-400 text-xs truncate">{s.stream_title?.slice(0, 40)}</div>
+                        <div className="font-bold text-sm truncate">{s.display_name}</div>
+                        <div className="text-slate-400 text-xs truncate">{s.game_name}</div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="font-bold text-xs">{s.viewer_count?.toLocaleString()}</div>
-                        <div className="text-slate-400 text-xs">viewers</div>
+                        <div className="font-bold text-xs">{s.viewer_count.toLocaleString()}</div>
+                        <div className="text-slate-300 text-xs">¥{(s.estimated_cost_jpy/10000).toFixed(0)}万</div>
                       </div>
                     </Link>
                   ))}

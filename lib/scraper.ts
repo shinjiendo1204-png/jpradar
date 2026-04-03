@@ -82,7 +82,7 @@ function extractProducts(html: string, keyword: string): SurugayaProduct[] {
   return products;
 }
 
-async function fetchHtml(targetUrl: string, usePremium = false): Promise<string> {
+async function fetchHtml(targetUrl: string, usePremium = false, countryCode = 'jp'): Promise<string> {
   const sbKey = process.env.SCRAPINGBEE_KEY;
   if (sbKey) {
     const params = new URLSearchParams({
@@ -90,7 +90,7 @@ async function fetchHtml(targetUrl: string, usePremium = false): Promise<string>
       url: targetUrl,
       render_js: 'false',
       premium_proxy: usePremium ? 'true' : 'false',
-      country_code: 'jp',
+      country_code: countryCode,
     });
     const res = await fetch(`https://app.scrapingbee.com/api/v1/?${params}`);
     if (!res.ok) throw new Error(`Scrapingbee HTTP ${res.status}`);
@@ -115,19 +115,32 @@ export async function scrapeSurugaya(keyword: string): Promise<SurugayaProduct[]
 }
 
 export async function getEbaySoldPrice(query: string): Promise<number> {
-  const url = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1&LH_Complete=1&_ipg=40`;
+  const url = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1&LH_Complete=1&_ipg=40&LH_ItemCondition=3000`;
   let html: string;
   try {
-    html = await fetchHtml(url, false); // standard proxy for eBay (no Cloudflare)
+    html = await fetchHtml(url, false, 'us'); // eBay needs US IP
   } catch {
     return 0;
   }
 
   const prices: number[] = [];
+  // Multiple patterns to catch different eBay HTML structures
   const p1 = /class="s-item__price"[^>]*>\s*(?:US\s*)?\$\s*([\d,]+\.?\d*)/gi;
   let m: RegExpExecArray | null;
   while ((m = p1.exec(html)) !== null) {
     const val = parseFloat(m[1].replace(/,/g, ''));
+    if (val > 0.5 && val < 50000) prices.push(val);
+  }
+  // Pattern 2: data-price attributes
+  const p2 = /data-price="([\d.]+)"/g;
+  while ((m = p2.exec(html)) !== null) {
+    const val = parseFloat(m[1]);
+    if (val > 0.5 && val < 50000) prices.push(val);
+  }
+  // Pattern 3: JSON-LD price
+  const p3 = /"price":\s*"?([\d.]+)"?/g;
+  while ((m = p3.exec(html)) !== null) {
+    const val = parseFloat(m[1]);
     if (val > 0.5 && val < 50000) prices.push(val);
   }
   if (prices.length === 0) return 0;

@@ -49,14 +49,18 @@ function extractProducts(html: string, keyword: string): SurugayaProduct[] {
     const titleMatch = block.match(/<h3[^>]*class="product-name"[^>]*>\s*([^<]+?)\s*<\/h3>/);
     const title = titleMatch ? decodeHtml(titleMatch[1].trim()) : `商品ID:${id}`;
 
-    // Price: remove retail (teika) and crossed-out (strike) prices first, then find ¥XXX
+    // Skip sold-out items
+    if (block.includes('品切れ') || block.includes('soldout')) continue;
+
+    // Price is in <div class="item_price"> section
+    // Remove teika (定価) and strike (crossed-out) prices, then find actual price
     const cleanBlock = block
-      .replace(/class="price_teika">[^<]*<\/[^>]+>/g, '')
+      .replace(/class="price_teika">[\s\S]*?<\/p>/g, '')
       .replace(/class="strike">[^<]*<\/[^>]+>/g, '');
-    const priceMatch = cleanBlock.match(/[¥￥]([\d,]+)/);
+    const priceMatch = cleanBlock.match(/[¥￥](\d[\d,]*)/);
     if (!priceMatch) continue;
     const price = parsePrice(priceMatch[1]);
-    if (price < 100 || price > 500000) continue;
+    if (price < 100 || price > 200000) continue;
 
     // Image
     const imgMatch = block.match(/src="(https?:\/\/www\.suruga-ya\.jp[^"]+\.(?:jpg|jpeg|png|webp)[^"]*?)"/);

@@ -131,12 +131,14 @@ export async function GET(req: NextRequest) {
       ? Math.round(broadcasts.reduce((s, b) => s + b.view_count, 0) / broadcasts.length)
       : 0;
 
-    // Genre fit detection: title match + game name + keyword
-    const titleText = broadcasts.map(b => b.title).join(' ').toLowerCase();
+    // Genre fit ratio: fraction of broadcasts with this game/genre
     const gameNameLower = gameName.toLowerCase();
-    const hasGameInTitle = broadcasts.some(b => b.title.toLowerCase().includes(gameNameLower.split(' ')[0]));
-    const hasKeywordInTitle = titleText.includes(gameNameLower);
-    const genreFitScore = (hasGameInTitle || hasKeywordInTitle) ? 1.0 : 0.4;
+    const gameKeyword = gameNameLower.split(' ')[0];
+    const relevantCount = broadcasts.filter(b =>
+      b.title.toLowerCase().includes(gameKeyword)
+    ).length;
+    const genreBroadcastRatio = broadcasts.length > 0 ? relevantCount / broadcasts.length : 0;
+    const genreFitScore = genreBroadcastRatio;
 
     // Clips per broadcast (engagement proxy — estimate from view count)
     const clipsPerBroadcast = avgViewCount > 10000 ? 3 : avgViewCount > 2000 ? 1 : 0.3;
@@ -156,7 +158,7 @@ export async function GET(req: NextRequest) {
       avg_view_count: avgViewCount,
       engagement_rate: engagementRate,
       review_delta_per_stream: avgReviewDelta,
-      genre_fit: genreFitScore,
+      genre_broadcast_ratio: genreBroadcastRatio,
       peak_hour_bonus: 1.0,
     });
 

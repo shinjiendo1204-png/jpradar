@@ -83,20 +83,22 @@ export async function POST(req: NextRequest) {
           ? broadcasts.reduce((s, b) => s + b.view_count, 0) / broadcasts.length
           : stream.viewer_count;
 
-        // Check genre fit: title keywords + game_id match + language
-        const titleText = broadcasts.map(b => b.title).join(' ').toLowerCase();
         const gameNameLower = game_name.toLowerCase();
         const genreKeywords = GENRE_KEYWORDS[genre] || [];
 
-        // Match if: game name in title, genre keyword in title, or same game_id in broadcasts
-        const hasGameInTitle = broadcasts.some(b => b.title.toLowerCase().includes(gameNameLower.split(' ')[0]));
-        const hasGenreKeyword = genreKeywords.some(k => titleText.includes(k));
-        const sameGameId = broadcasts.some(b => (b as any).game_id === twitchGameId);
+        // Genre fit ratio: fraction of broadcasts related to game/genre
+        const gameKeyword = gameNameLower.split(' ')[0];
+        const relevantCount = broadcasts.filter(b => {
+          const t = b.title.toLowerCase();
+          return t.includes(gameKeyword) ||
+            genreKeywords.some(k => t.includes(k)) ||
+            (b as any).game_id === twitchGameId;
+        }).length;
+        const genreBroadcastRatio = broadcasts.length > 0 ? relevantCount / broadcasts.length : 0;
+        const genreFit = genreBroadcastRatio > 0.3;
 
-        const genreFit = (hasGameInTitle || hasGenreKeyword || sameGameId) ? 1.0 : 0.3;
-
-        // Estimate clips per broadcast (proxy for engagement)
-        const clipsPerBroadcast = avgViews > 10000 ? 3 : avgViews > 2000 ? 1 : 0.3;
+        // Engagement rate: estimate from avg viewers (fallback)
+        const engagementRate = avgViews < 1000 ? 0.05 : avgViews < 10000 ? 0.02 : avgViews < 100000 ? 0.01 : 0.005;
 
         // Get actual Lag Curve data for this streamer
         let reviewDeltaPerStream = 0.1; // default: no evidence
@@ -112,15 +114,12 @@ export async function POST(req: NextRequest) {
           reviewDeltaPerStream = 0.1;
         }
 
-        // Engagement rate estimate from clips relative to viewers
-        const engagementRate = avgViews > 0 ? Math.min(clipsPerBroadcast / (avgViews / 1000), 1) : 0;
-
         const vResult = calcVFunction({
           avg_view_count: avgViews,
           avg_category_views: categoryAvgViews,
           review_delta_per_stream: reviewDeltaPerStream,
           engagement_rate: engagementRate,
-          genre_fit: genreFit,
+          genre_broadcast_ratio: genreBroadcastRatio,
           peak_hour_bonus: 1.0,
         });
 
@@ -136,7 +135,7 @@ export async function POST(req: NextRequest) {
           v_score: vResult.v_score,
           tier: vResult.tier,
           estimated_purchases_mid: vResult.estimated_purchases_per_stream.mid,
-          genre_fit: genreFit > 0.5,
+          genre_fit: genreFit,
           avg_view_count: Math.round(avgViews),
         };
       })

@@ -79,9 +79,13 @@ export async function GET(req: NextRequest) {
     // Total concurrent viewers (for attribution calculation)
     const totalConcurrentViewers = liveStreams.reduce((s, st) => s + st.viewer_count, 0);
 
+    // Filter to JP streamers first, fallback to all if less than 3
+    const jpStreams = liveStreams.filter(s => s.language === 'ja');
+    const streamsToRank = jpStreams.length >= 3 ? jpStreams : liveStreams;
+
     // Build streamer ranking with attribution
     const streamersWithAttribution = await Promise.all(
-      liveStreams.slice(0, 10).map(async (stream) => {
+      streamsToRank.slice(0, 10).map(async (stream) => {
         // Get past broadcasts to determine genre affinity
         const streamerInfo = await getStreamerInfo(stream.user_name).catch(() => null);
         const broadcasts = streamerInfo

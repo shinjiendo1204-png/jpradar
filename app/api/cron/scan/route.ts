@@ -8,11 +8,14 @@ import {
 } from '@/lib/scraper';
 
 const SCAN_TARGETS = [
-  { keyword: 'レトロゲーム', category: 'game' },
-  { keyword: 'ゲームソフト ファミコン', category: 'game' },
-  { keyword: 'スーパーファミコン ソフト', category: 'game' },
-  { keyword: 'フィギュア 限定', category: 'figure' },
-  { keyword: 'トレーディングカード ポケモン', category: 'card' },
+  { keyword: 'ドラゴンクエスト ファミコン', category: 'game' },
+  { keyword: 'ファイナルファンタジー スーパーファミコン', category: 'game' },
+  { keyword: 'ポケモン ゲームボーイ カートリッジ', category: 'game' },
+  { keyword: 'ゼルダの伝説 ファミコン', category: 'game' },
+  { keyword: 'メガドライブ ソフト', category: 'game' },
+  { keyword: 'フィギュア エヴァンゲリオン 限定', category: 'figure' },
+  { keyword: 'ポケモンカード 旧裏 希少', category: 'card' },
+  { keyword: 'ドラゴンボール カードダス', category: 'card' },
 ] as const;
 
 const WEIGHT: Record<string, number> = {

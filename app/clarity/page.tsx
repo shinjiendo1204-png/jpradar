@@ -266,27 +266,42 @@ export default function ClarityPage() {
               </div>
             )}
 
-            {/* Reviews */}
-            {result.recent_reviews.length > 0 && (
+            {/* Review Summary */}
+            {(result as any).review_summary && (
               <div className="bg-white border border-slate-200 rounded-2xl p-6">
                 <h3 className="font-black text-lg mb-1 flex items-center gap-2">
-                  <MessageCircle size={18} className="text-blue-600" /> Recent JP Player Reviews
+                  <MessageCircle size={18} className="text-blue-600" /> What JP Players Are Saying
                 </h3>
-                <p className="text-slate-400 text-xs mb-5">Japanese + English translation</p>
-                <div className="space-y-4">
-                  {result.recent_reviews.map((r, i) => (
-                    <div key={i} className={`rounded-xl border p-4 ${r.positive ? "bg-emerald-50 border-emerald-100" : "bg-red-50 border-red-100"}`}>
-                      <div className="flex items-start gap-2 mb-2">
-                        <span className="text-lg">{r.positive ? "👍" : "👎"}</span>
-                        <div>
-                          <p className="text-slate-600 text-sm leading-relaxed">{r.text_ja}</p>
-                          {translations[i] && (
-                            <p className="text-slate-400 text-xs mt-1 italic">"{translations[i]}"</p>
-                          )}
+                <p className="text-slate-400 text-xs mb-5">AI summary of recent Japanese reviews</p>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-emerald-600 font-bold text-sm mb-3 flex items-center gap-1">👍 Players love</div>
+                    <div className="space-y-2">
+                      {((result as any).review_summary.positive || []).map((item: any, i: number) => (
+                        <div key={i} className="flex items-center gap-2 bg-emerald-50 rounded-xl px-3 py-2 border border-emerald-100">
+                          <span className="text-emerald-600 text-sm flex-1">{item.theme}</span>
+                          <span className="text-emerald-400 text-xs font-bold">{item.count} mentions</span>
                         </div>
-                      </div>
+                      ))}
+                      {((result as any).review_summary.positive || []).length === 0 && (
+                        <p className="text-slate-400 text-sm">Not enough data</p>
+                      )}
                     </div>
-                  ))}
+                  </div>
+                  <div>
+                    <div className="text-red-600 font-bold text-sm mb-3 flex items-center gap-1">👎 Players dislike</div>
+                    <div className="space-y-2">
+                      {((result as any).review_summary.negative || []).map((item: any, i: number) => (
+                        <div key={i} className="flex items-center gap-2 bg-red-50 rounded-xl px-3 py-2 border border-red-100">
+                          <span className="text-red-600 text-sm flex-1">{item.theme}</span>
+                          <span className="text-red-400 text-xs font-bold">{item.count} mentions</span>
+                        </div>
+                      ))}
+                      {((result as any).review_summary.negative || []).length === 0 && (
+                        <p className="text-slate-400 text-sm">Not enough data</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

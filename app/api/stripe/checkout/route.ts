@@ -8,16 +8,18 @@ import { createClient } from '@supabase/supabase-js';
  * Returns { url: string } — redirect the user to this URL.
  */
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-01-27.acacia',
-});
+function getStripe() {
+  return new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: '2025-01-27.acacia',
+  });
+}
 
-// Price IDs from your Stripe dashboard
-// Set these in Vercel env vars after creating products in Stripe
-const PRICE_IDS: Record<string, string> = {
-  hunter: process.env.STRIPE_PRICE_HUNTER!, // $29/month
-  pro:    process.env.STRIPE_PRICE_PRO!,    // $79/month
-};
+function getPriceIds(): Record<string, string> {
+  return {
+    hunter: process.env.STRIPE_PRICE_HUNTER!, // $29/month
+    pro:    process.env.STRIPE_PRICE_PRO!,    // $79/month
+  };
+}
 
 export async function POST(req: NextRequest) {
   const supabase = createClient(
@@ -38,7 +40,8 @@ export async function POST(req: NextRequest) {
   }
 
   const { plan } = await req.json();
-  const priceId = PRICE_IDS[plan];
+  const stripe = getStripe();
+  const priceId = getPriceIds()[plan];
   if (!priceId) {
     return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
   }

@@ -11,18 +11,21 @@ import { createClient } from '@supabase/supabase-js';
  * Events: customer.subscription.created, updated, deleted
  */
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-01-27.acacia',
-});
-
-const PRICE_TO_PLAN: Record<string, string> = {
-  [process.env.STRIPE_PRICE_HUNTER!]: 'hunter',
-  [process.env.STRIPE_PRICE_PRO!]: 'pro',
-};
+function getStripe() {
+  return new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: '2025-01-27.acacia',
+  });
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get('stripe-signature')!;
+
+  const stripe = getStripe();
+  const PRICE_TO_PLAN: Record<string, string> = {
+    [process.env.STRIPE_PRICE_HUNTER!]: 'hunter',
+    [process.env.STRIPE_PRICE_PRO!]: 'pro',
+  };
 
   let event: Stripe.Event;
   try {

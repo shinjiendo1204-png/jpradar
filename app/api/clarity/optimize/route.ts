@@ -78,10 +78,17 @@ export async function POST(req: NextRequest) {
           ? broadcasts.reduce((s, b) => s + b.view_count, 0) / broadcasts.length
           : stream.viewer_count;
 
-        // Check genre fit from past broadcast titles
+        // Check genre fit: title keywords + game_id match + language
         const titleText = broadcasts.map(b => b.title).join(' ').toLowerCase();
+        const gameNameLower = game_name.toLowerCase();
         const genreKeywords = GENRE_KEYWORDS[genre] || [];
-        const genreFit = genreKeywords.some(k => titleText.includes(k)) ? 1.0 : 0.3;
+
+        // Match if: game name in title, genre keyword in title, or same game_id in broadcasts
+        const hasGameInTitle = broadcasts.some(b => b.title.toLowerCase().includes(gameNameLower.split(' ')[0]));
+        const hasGenreKeyword = genreKeywords.some(k => titleText.includes(k));
+        const sameGameId = broadcasts.some(b => (b as any).game_id === twitchGameId);
+
+        const genreFit = (hasGameInTitle || hasGenreKeyword || sameGameId) ? 1.0 : 0.3;
 
         // Estimate clips per broadcast (proxy for engagement)
         const clipsPerBroadcast = avgViews > 10000 ? 3 : avgViews > 2000 ? 1 : 0.3;

@@ -131,10 +131,12 @@ export async function GET(req: NextRequest) {
       ? Math.round(broadcasts.reduce((s, b) => s + b.view_count, 0) / broadcasts.length)
       : 0;
 
-    // Genre fit detection
+    // Genre fit detection: title match + game name + keyword
     const titleText = broadcasts.map(b => b.title).join(' ').toLowerCase();
-    const gameKeywordsLower = gameName.toLowerCase().split(' ').filter(w => w.length > 2);
-    const genreFitScore = gameKeywordsLower.some(k => titleText.includes(k)) ? 1.0 : 0.3;
+    const gameNameLower = gameName.toLowerCase();
+    const hasGameInTitle = broadcasts.some(b => b.title.toLowerCase().includes(gameNameLower.split(' ')[0]));
+    const hasKeywordInTitle = titleText.includes(gameNameLower);
+    const genreFitScore = (hasGameInTitle || hasKeywordInTitle) ? 1.0 : 0.4;
 
     // Clips per broadcast (engagement proxy — estimate from view count)
     const clipsPerBroadcast = avgViewCount > 10000 ? 3 : avgViewCount > 2000 ? 1 : 0.3;

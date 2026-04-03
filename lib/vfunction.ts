@@ -52,8 +52,11 @@ export function calcVFunction(input: VFunctionInput): VFunctionOutput {
 
   const rawScore = reachComp * engageComp * convertComp * fitComp * timeBonus;
 
-  // Normalize to 0-100 (calibrated so top streamers score ~90+)
-  const v_score = Math.min(Math.round(rawScore * 8), 100);
+  // Normalize: log scale to prevent saturation
+  // At typical values (10k viewers, some engagement, some conversion): rawScore ~5-15
+  // At very high values (100k viewers): rawScore ~20-30
+  // Map to 0-100 with log curve
+  const v_score = Math.min(Math.round(Math.log10(rawScore + 1) * 55), 100);
 
   // CBI: Chat Buy-Intent Index
   // Higher engagement relative to viewers = higher buying intent
@@ -61,11 +64,11 @@ export function calcVFunction(input: VFunctionInput): VFunctionOutput {
   const conversionRate = avg_view_count > 0 ? review_delta_per_stream / (avg_view_count / 1000) : 0;
   const cbi_index = Math.min(Math.round((engagementRate * 40 + conversionRate * 60)), 100);
 
-  // Tier
+  // Tier — calibrated for log-normalized score
   const tier: VFunctionOutput['tier'] =
-    v_score >= 70 ? 'S' :
-    v_score >= 45 ? 'A' :
-    v_score >= 25 ? 'B' : 'C';
+    v_score >= 65 ? 'S' :
+    v_score >= 48 ? 'A' :
+    v_score >= 32 ? 'B' : 'C';
 
   // Estimated purchases per stream
   // Base: avg_view_count × conversion_rate

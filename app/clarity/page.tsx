@@ -88,6 +88,7 @@ export default function ClarityPage() {
   const [selectedGame, setSelectedGame] = useState<GameSearchResult | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [ranking, setRanking] = useState<any>(null);
+  const [trending, setTrending] = useState<any[]>([]);
   const [translations, setTranslations] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -95,6 +96,14 @@ export default function ClarityPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'ranking'>('overview');
   const searchRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<any>(null);
+
+  // Load trending on mount
+  useEffect(() => {
+    fetch('/api/clarity/trending')
+      .then(r => r.json())
+      .then(d => setTrending(d.trending_jp_games || []))
+      .catch(() => {});
+  }, []);
 
   // Search as user types
   useEffect(() => {
@@ -211,6 +220,37 @@ export default function ClarityPage() {
             )}
           </AnimatePresence>
         </div>
+
+        {/* Trending games — show when no result */}
+        {!result && !loading && trending.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-black text-slate-700">🔥 Hot on JP Twitch right now</span>
+              <span className="text-xs text-slate-400">updated every 15 min</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {trending.slice(0, 6).map((game, i) => (
+                <button
+                  key={i}
+                  onClick={() => setQuery(game.game_name)}
+                  className="bg-white border border-slate-200 rounded-2xl p-4 text-left hover:border-blue-300 hover:shadow-sm transition-all group"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-slate-400 font-bold">#{game.rank}</span>
+                    <span className="text-xs bg-orange-50 text-orange-600 border border-orange-200 px-1.5 py-0.5 rounded-full font-bold">
+                      {game.heat_score} 🌡️
+                    </span>
+                  </div>
+                  <div className="font-bold text-sm group-hover:text-blue-600 transition-colors truncate">{game.game_name}</div>
+                  <div className="text-slate-400 text-xs mt-1">
+                    {game.jp_streamers} JP streamers · {game.jp_viewers.toLocaleString()} viewers
+                  </div>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-400 text-center">Click any game to analyze its JP market</p>
+          </motion.div>
+        )}
 
         {/* Loading */}
         {loading && (

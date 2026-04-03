@@ -72,15 +72,19 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [streamer, broadcasts, steamDaily] = await Promise.all([
-      getStreamerInfo(username),
-      getStreamerInfo(username).then(s => s ? getPastBroadcasts(s.id, 20) : []),
+    // lowercase username for Twitch API
+    const normalizedUsername = username.toLowerCase();
+
+    const [streamer, steamDaily] = await Promise.all([
+      getStreamerInfo(normalizedUsername),
       steamId ? getSteamDailyReviews(steamId) : Promise.resolve([]),
     ]);
 
     if (!streamer) {
-      return NextResponse.json({ error: 'Streamer not found' }, { status: 404 });
+      return NextResponse.json({ error: `Streamer "${username}" not found on Twitch` }, { status: 404 });
     }
+
+    const broadcasts = await getPastBroadcasts(streamer.id, 20);
 
     // Filter broadcasts that include this game
     const gameKeywords = gameName.toLowerCase().split(' ').filter(w => w.length > 2);

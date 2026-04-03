@@ -48,11 +48,11 @@ function parseDuration(duration: string): number {
 }
 
 export async function GET(req: NextRequest) {
-  const steamId = req.nextUrl.searchParams.get('steam_id');
+  const steamId = req.nextUrl.searchParams.get('steam_id') || '';
   const gameName = req.nextUrl.searchParams.get('game_name') || '';
 
-  if (!steamId || !gameName) {
-    return NextResponse.json({ error: 'Missing steam_id or game_name' }, { status: 400 });
+  if (!gameName) {
+    return NextResponse.json({ error: 'Missing game_name' }, { status: 400 });
   }
 
   try {

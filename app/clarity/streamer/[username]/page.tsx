@@ -73,11 +73,13 @@ export default function StreamerPage() {
   const [data, setData] = useState<StreamerData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [period, setPeriod] = useState<'7d' | '30d' | '180d'>('30d');
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
       try {
-        const url = `/api/clarity/streamer?username=${username}&steam_id=${steamId}&game_name=${encodeURIComponent(gameName)}&live_viewers=${liveViewers}`;
+        const url = `/api/clarity/streamer?username=${username}&steam_id=${steamId}&game_name=${encodeURIComponent(gameName)}&live_viewers=${liveViewers}&period=${period}`;
         const res = await fetch(url);
         const json = await res.json();
         if (json.error) throw new Error(json.error);
@@ -89,7 +91,7 @@ export default function StreamerPage() {
       }
     }
     load();
-  }, [username, steamId, gameName, liveViewers]);
+  }, [username, steamId, gameName, liveViewers, period]);
 
   if (loading) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -168,11 +170,24 @@ export default function StreamerPage() {
           </div>
         </div>
 
+        {/* Period selector */}
+        <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+          {(['7d', '30d', '180d'] as const).map(p => (
+            <button key={p} onClick={() => setPeriod(p)}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                period === p ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+              }`}>
+              {p === '7d' ? '7 days' : p === '30d' ? '30 days' : '6 months'}
+            </button>
+          ))}
+        </div>
+
         {/* Genre breakdown */}
         {data.streamer.genre_breakdown.length > 0 && (
           <div className="bg-white border border-slate-200 rounded-2xl p-5">
             <h3 className="font-black text-base mb-4 flex items-center gap-2">
-              <BarChart2 size={16} className="text-blue-600" /> Content Breakdown (last 30 days)
+              <BarChart2 size={16} className="text-blue-600" /> Content Breakdown
+              <span className="text-xs text-slate-400 font-normal">({period === '7d' ? 'last 7 days' : period === '30d' ? 'last 30 days' : 'last 6 months'})</span>
             </h3>
             <div className="space-y-3">
               {data.streamer.genre_breakdown.map((g, i) => (

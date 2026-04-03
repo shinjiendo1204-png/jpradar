@@ -110,12 +110,18 @@ export default function ClarityPage() {
   useEffect(() => {
     fetch('/api/clarity/trending')
       .then(r => r.json())
-      .then(d => setTrending(d.trending_jp_games || []))
-      .catch(() => {});
-    // Top JP streamers overall
-    fetch('/api/clarity/ranking?steam_id=730&game_name=Counter-Strike+2')
-      .then(r => r.json())
-      .then(d => setTopStreamers((d.streamers || []).slice(0, 8)))
+      .then(d => {
+        const games = d.trending_jp_games || [];
+        setTrending(games);
+        // Load streamer ranking from top trending game
+        if (games.length > 0) {
+          const topGame = games[0];
+          fetch(`/api/clarity/ranking?steam_id=0&game_name=${encodeURIComponent(topGame.game_name)}`)
+            .then(r => r.json())
+            .then(rd => setTopStreamers((rd.streamers || []).slice(0, 8)))
+            .catch(() => {});
+        }
+      })
       .catch(() => {});
   }, []);
 

@@ -76,12 +76,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: `Streamer "${username}" not found on Twitch` }, { status: 404 });
     }
 
-    // Get past 30 days of broadcasts (limit 20 to stay within timeframe)
-    const broadcasts = await getPastBroadcasts(streamer.id, 20);
+    // Get past broadcasts — fetch 50 to cover up to 6 months
+    const broadcasts = await getPastBroadcasts(streamer.id, 50);
 
-    // Filter to last 30 days
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600000);
-    const recentBroadcasts = broadcasts.filter(b => new Date(b.created_at) >= thirtyDaysAgo);
+    // Period param: 7d, 30d, 180d
+    const period = req.nextUrl.searchParams.get('period') || '30d';
+    const periodDays = period === '7d' ? 7 : period === '180d' ? 180 : 30;
+    const cutoff = new Date(Date.now() - periodDays * 24 * 3600000);
+    const recentBroadcasts = broadcasts.filter(b => new Date(b.created_at) >= cutoff);
 
     // NOTE: Twitch VOD view_count = total replay views, NOT live concurrent viewers.
     // To get avg concurrent viewers:
@@ -170,8 +172,18 @@ export async function GET(req: NextRequest) {
       peak_hour_bonus: 1.0,
     });
 
-    const estimatedCostJpy = avgViewCount < 500 ? 30000 : avgViewCount < 2000 ? 100000
-      : avgViewCount < 10000 ? 300000 : avgViewCount < 50000 ? 800000 : 2000000;
+    // JP streamer market rates (per sponsored stream)
+    // Based on industry data: JP top tier ~¥2M/stream, mid tier ~¥300-500k
+    // WSJ: global top = $50k/hour = ~¥7M, JP top = ~¥2M estimated
+    const estimatedCostJpy =
+      avgViewCount < 200   ? 20000      // micro: ¥20k
+      : avgViewCount < 500 ? 50000      // small: ¥50k
+      : avgViewCount < 1000 ? 100000    // ¥100k
+      : avgViewCount < 3000 ? 200000    // ¥200k
+      : avgViewCount < 10000 ? 500000   // ¥500k
+      : avgViewCount < 30000 ? 1000000  // ¥1M
+      : avgViewCount < 100000 ? 2000000 // ¥2M (JP top tier)
+      : 5000000;                         // ¥5M+ (mega tier)
 
     const costPerPurchase = vResult.estimated_purchases_per_stream.mid > 0
       ? Math.round(estimatedCostJpy / vResult.estimated_purchases_per_stream.mid)

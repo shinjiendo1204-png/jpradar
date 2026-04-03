@@ -129,8 +129,8 @@ export async function getStreamersInfo(usernames: string[]): Promise<TwitchStrea
   return data.data || [];
 }
 
-/** Get top JP streamers for a game by searching recent VODs */
-export async function getTopJPStreamersForGame(gameId: string, limit = 50): Promise<{
+/** Get top JP streamers for a game */
+export async function getTopJPStreamersForGame(gameId: string, limit = 50, minViewers = 20): Promise<{
   user_id: string;
   user_name: string;
   viewer_count: number;
@@ -139,14 +139,24 @@ export async function getTopJPStreamersForGame(gameId: string, limit = 50): Prom
   started_at: string;
 }[]> {
   const token = await getTwitchToken();
-  // Get live + recent streams, no language filter
-  const res = await fetch(
+  // Try JP language first
+  const jpRes = await fetch(
+    `https://api.twitch.tv/helix/streams?game_id=${gameId}&first=${limit}&language=ja`,
+    { headers: twitchHeaders(token) }
+  );
+  if (jpRes.ok) {
+    const jpData = await jpRes.json();
+    const jpStreams = (jpData.data || []).filter((s: any) => s.viewer_count >= minViewers);
+    if (jpStreams.length >= 3) return jpStreams;
+  }
+  // Fallback: all languages, filter JP
+  const allRes = await fetch(
     `https://api.twitch.tv/helix/streams?game_id=${gameId}&first=${limit}`,
     { headers: twitchHeaders(token) }
   );
-  if (!res.ok) return [];
-  const data = await res.json();
-  return (data.data || []).filter((s: any) => s.viewer_count >= 20);
+  if (!allRes.ok) return [];
+  const allData = await allRes.json();
+  return (allData.data || []).filter((s: any) => s.language === 'ja' && s.viewer_count >= minViewers);
 }
 
 /** Get past broadcasts for a streamer */

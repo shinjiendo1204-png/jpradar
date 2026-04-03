@@ -82,21 +82,25 @@ function extractProducts(html: string, keyword: string): SurugayaProduct[] {
   return products;
 }
 
-async function fetchHtml(targetUrl: string): Promise<string> {
+async function fetchHtml(targetUrl: string, usePremium = false): Promise<string> {
   const sbKey = process.env.SCRAPINGBEE_KEY;
   if (sbKey) {
-    // Use Scrapingbee to bypass Cloudflare/IP blocks
-    const sbUrl = `https://app.scrapingbee.com/api/v1/?api_key=${sbKey}&url=${encodeURIComponent(targetUrl)}&render_js=false&premium_proxy=false`;
-    const res = await fetch(sbUrl);
+    const params = new URLSearchParams({
+      api_key: sbKey,
+      url: targetUrl,
+      render_js: 'false',
+      premium_proxy: usePremium ? 'true' : 'false',
+      country_code: 'jp',
+    });
+    const res = await fetch(`https://app.scrapingbee.com/api/v1/?${params}`);
     if (!res.ok) throw new Error(`Scrapingbee HTTP ${res.status}`);
     return res.text();
   }
-  // Fallback: direct fetch (works locally, may 403 on Vercel)
+  // Fallback: direct fetch (works locally)
   const res = await fetch(targetUrl, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept-Language': 'ja-JP,ja;q=0.9',
     },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -105,20 +109,19 @@ async function fetchHtml(targetUrl: string): Promise<string> {
 
 export async function scrapeSurugaya(keyword: string): Promise<SurugayaProduct[]> {
   const url = `https://www.suruga-ya.jp/search?category=&search_word=${encodeURIComponent(keyword)}&rankBy=new`;
-  const html = await fetchHtml(url);
+  // premium_proxy=true to bypass Cloudflare on suruga-ya.jp
+  const html = await fetchHtml(url, true);
   return extractProducts(html, keyword);
 }
 
 export async function getEbaySoldPrice(query: string): Promise<number> {
   const url = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1&LH_Complete=1&_ipg=40`;
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      'Accept-Language': 'en-US,en;q=0.9',
-    },
-  });
-  if (!res.ok) return 0;
-  const html = await res.text();
+  let html: string;
+  try {
+    html = await fetchHtml(url, false); // standard proxy for eBay (no Cloudflare)
+  } catch {
+    return 0;
+  }
 
   const prices: number[] = [];
   const p1 = /class="s-item__price"[^>]*>\s*(?:US\s*)?\$\s*([\d,]+\.?\d*)/gi;

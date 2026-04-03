@@ -112,11 +112,7 @@ export default function PricingPage() {
           JP<span className="text-blue-600">RADAR</span>
         </Link>
         <div className="flex items-center gap-4">
-          {user ? (
-            <Link href="/dashboard" className="text-slate-500 hover:text-slate-900 text-sm font-medium transition-colors">
-              Dashboard
-            </Link>
-          ) : (
+          {user  (
             <Link href="/auth/login" className="text-slate-500 hover:text-slate-900 text-sm font-medium transition-colors">
               Login
             </Link>

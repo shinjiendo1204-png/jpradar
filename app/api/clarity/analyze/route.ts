@@ -79,9 +79,11 @@ export async function GET(req: NextRequest) {
         top_streamers: topStreamers,
       },
       buying_signals: buyingSignals,
-      recent_reviews: recentReviews.slice(0, 3).map(r => ({
-        text: r.review.slice(0, 100),
+      recent_reviews: recentReviews.slice(0, 5).map(r => ({
+        text_ja: r.review.slice(0, 150),
+        text_en: '', // translated client-side or via separate call
         positive: r.voted_up,
+        timestamp: r.timestamp,
       })),
       analyzed_at: new Date().toISOString(),
     });

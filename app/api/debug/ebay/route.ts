@@ -27,17 +27,24 @@ export async function GET(req: NextRequest) {
     fetchedVia = `direct status=${res.status}`;
   }
 
-  // Show first 2000 chars + price matches
-  const priceMatches = html.match(/s-item__price[^>]*>[^<]*/g)?.slice(0, 10) || [];
-  const hasLogin = html.includes('Sign in') || html.includes('ログイン');
   const hasItems = html.includes('s-item');
+
+  // Find price-related snippets
+  const idx = html.indexOf('s-item__price');
+  const priceSnippet = idx >= 0 ? html.slice(idx, idx + 300) : 'NOT FOUND';
+
+  // Try multiple patterns
+  const p1 = html.match(/class="s-item__price"[^>]*>([^<]+)</g)?.slice(0, 5) || [];
+  const p2 = html.match(/\$[\d,]+\.\d{2}/g)?.slice(0, 5) || [];
+  const p3 = html.match(/"price":\{"value":"[^"]+"/g)?.slice(0, 5) || [];
 
   return NextResponse.json({
     fetchedVia,
     htmlLength: html.length,
-    first500: html.slice(0, 500),
-    hasLoginWall: hasLogin,
     hasItems,
-    priceMatches,
+    priceSnippet,
+    pattern1_results: p1,
+    pattern2_dollars: p2,
+    pattern3_json: p3,
   });
 }

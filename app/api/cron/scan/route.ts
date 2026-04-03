@@ -60,13 +60,20 @@ async function getEbaySoldItems(query: string, minPrice: number): Promise<EbaySo
   const items: EbaySoldItem[] = [];
   let m: RegExpExecArray | null;
 
-  // Extract item titles and prices together
-  // eBay HTML: title in aria-label or title attributes near price
-  const titlePattern = /aria-label="([^"]{10,100})"/g;
+  // Extract item titles from h3 tags (eBay sold listing structure)
   const titles: string[] = [];
-  while ((m = titlePattern.exec(html)) !== null) {
-    if (!m[1].includes('eBay') && !m[1].includes('Search')) {
-      titles.push(m[1]);
+  // Pattern 1: <h3 class="...s-item__title...">TITLE</h3>
+  const h3Pattern = /<h3[^>]*s-item__title[^>]*>\s*([^<]{5,120})\s*<\/h3>/gi;
+  while ((m = h3Pattern.exec(html)) !== null) {
+    const t = m[1].trim().replace(/\s+/g, ' ');
+    if (!t.includes('Shop on eBay') && t.length > 5) titles.push(t);
+  }
+  // Pattern 2: span role="heading" (alternate eBay structure)
+  if (titles.length === 0) {
+    const spanPattern = /<span role="heading"[^>]*>\s*([^<]{5,120})\s*<\/span>/gi;
+    while ((m = spanPattern.exec(html)) !== null) {
+      const t = m[1].trim();
+      if (!t.includes('eBay') && t.length > 5) titles.push(t);
     }
   }
 

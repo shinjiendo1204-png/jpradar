@@ -119,7 +119,7 @@ export async function scrapeSurugaya(keyword: string): Promise<SurugayaProduct[]
 }
 
 export async function getEbaySoldPrice(query: string): Promise<number> {
-  const url = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1&LH_Complete=1&_ipg=40`;
+  const url = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1&LH_Complete=1&_ipg=40&_sop=13`; // _sop=13 = sort by date
   let html: string;
   try {
     html = await fetchHtml(url, false, 'us');
@@ -132,11 +132,17 @@ export async function getEbaySoldPrice(query: string): Promise<number> {
   const dollarPattern = /\$([\d,]+\.\d{2})/g;
   while ((m = dollarPattern.exec(html)) !== null) {
     const val = parseFloat(m[1].replace(/,/g, ''));
-    if (val > 0.5 && val < 50000) prices.push(val);
+    // Filter out noise: shipping fees ($3-$15), very cheap ($<5), and unrealistic ($>5000)
+    if (val >= 5 && val < 5000) prices.push(val);
   }
   if (prices.length === 0) return 0;
   prices.sort((a, b) => a - b);
-  return prices[Math.floor(prices.length / 2)];
+  // Use 25th-75th percentile to avoid outliers
+  const p25 = prices[Math.floor(prices.length * 0.25)];
+  const p75 = prices[Math.floor(prices.length * 0.75)];
+  const filtered = prices.filter(p => p >= p25 && p <= p75);
+  const sample = filtered.length > 0 ? filtered : prices;
+  return sample.reduce((s, p) => s + p, 0) / sample.length;
 }
 
 export async function getExchangeRate(): Promise<number> {
@@ -160,10 +166,13 @@ export async function translateToEnglish(text: string): Promise<string> {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'Translate Japanese product names to English for eBay search. Keep brand names, model numbers. Be concise. Output only the translation.' },
+          {
+            role: 'system',
+            content: 'You are an eBay search query optimizer. Given a Japanese product name, output ONLY a short English eBay search query (2-5 words max). Focus on the core product name, keep Japanese proper nouns in romaji if needed. No explanations, no punctuation, just the search terms. Examples: "ファミコン探偵倶楽部" -> "Famicom Detective Club", "ポケットモンスター 赤" -> "Pokemon Red Game Boy", "ドラゴンクエストIII" -> "Dragon Quest III Famicom"',
+          },
           { role: 'user', content: text },
         ],
-        max_tokens: 80,
+        max_tokens: 30,
         temperature: 0,
       }),
     });

@@ -28,57 +28,58 @@ function decodeHtml(str: string): string {
 
 function extractProducts(html: string, keyword: string): SurugayaProduct[] {
   const products: SurugayaProduct[] = [];
-  let m: RegExpExecArray | null;
 
-  const linkRegex = /href="(\/product\/detail\/(\d+)[^"]*)"[^>]*>/gi;
-  const links: Array<{ path: string; id: string }> = [];
-  while ((m = linkRegex.exec(html)) !== null) {
-    if (!links.find(l => l.id === m![2])) links.push({ path: m[1], id: m[2] });
-    if (links.length >= 20) break;
+  // Surugaya actual HTML structure (confirmed via debug):
+  // <div class="item_detail">
+  //   <div class="title"><a href="/product/detail/NNNNNN...">TITLE</a></div>
+  //   ...price elements...
+  // Split by item_detail blocks
+  const blocks = html.split('<div class="item_detail">');
+
+  for (let i = 1; i < blocks.length; i++) {
+    const block = blocks[i];
+
+    // Product link and ID
+    const linkMatch = block.match(/href="(\/product\/detail\/(\d+)[^"]*?)"/);
+    if (!linkMatch) continue;
+    const path = linkMatch[1];
+    const id = linkMatch[2];
+
+    // Title from <div class="title"><a ...>TITLE</a>
+    const titleMatch = block.match(/<div class="title">\s*<a[^>]+>([^<]+)<\/a>/);
+    const title = titleMatch ? decodeHtml(titleMatch[1].trim()) : `商品ID:${id}`;
+
+    // Price: remove retail (teika) and crossed-out (strike) prices first, then find ¥XXX
+    const cleanBlock = block
+      .replace(/class="price_teika">[^<]*<\/[^>]+>/g, '')
+      .replace(/class="strike">[^<]*<\/[^>]+>/g, '');
+    const priceMatch = cleanBlock.match(/[¥￥]([\d,]+)/);
+    if (!priceMatch) continue;
+    const price = parsePrice(priceMatch[1]);
+    if (price < 100 || price > 500000) continue;
+
+    // Image
+    const imgMatch = block.match(/src="(https?:\/\/www\.suruga-ya\.jp[^"]+\.(?:jpg|jpeg|png|webp)[^"]*?)"/);
+    const imageUrl = imgMatch ? imgMatch[1] : '';
+
+    // Condition
+    const condition = block.includes('中古') ? '中古' : block.includes('新品') ? '新品' : '不明';
+
+    products.push({
+      id: `surugaya-${id}`,
+      title_ja: title,
+      price_jpy: price,
+      url: `https://www.suruga-ya.jp${path}`,
+      image_url: imageUrl,
+      condition,
+      category: keyword,
+      source: 'surugaya',
+      scraped_at: new Date().toISOString(),
+    });
+
+    if (products.length >= 10) break;
   }
 
-  const priceRegex = /[¥￥]([\d,]+)|(\d[\d,]+)\s*円/g;
-  const prices: number[] = [];
-  while ((m = priceRegex.exec(html)) !== null) {
-    const val = parsePrice(m[1] || m[2]);
-    if (val >= 100 && val <= 500000) prices.push(val);
-  }
-
-  const titleRegex = /<(?:h3|h2|p)\s+class="[^"]*(?:title|item_title|product_title)[^"]*"[^>]*>\s*([^<]{3,80})\s*<\/(?:h3|h2|p)>/gi;
-  const titles: string[] = [];
-  while ((m = titleRegex.exec(html)) !== null) titles.push(decodeHtml(m[1].trim()));
-  if (titles.length === 0) {
-    const altRegex = /alt="([^"]{3,60})"/gi;
-    while ((m = altRegex.exec(html)) !== null) {
-      if (!m[1].includes('http') && !m[1].includes('logo')) titles.push(decodeHtml(m[1]));
-      if (titles.length >= 15) break;
-    }
-  }
-
-  const imgRegex = /src="(https?:\/\/[^"]+(?:suruga-ya|surugaya)[^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/gi;
-  const images: string[] = [];
-  while ((m = imgRegex.exec(html)) !== null) {
-    if (!images.includes(m[1])) images.push(m[1]);
-    if (images.length >= 15) break;
-  }
-
-  const isUsed = html.includes('中古');
-  const count = Math.min(links.length, prices.length, 10);
-  for (let i = 0; i < count; i++) {
-    if (prices[i] > 0) {
-      products.push({
-        id: `surugaya-${links[i].id}`,
-        title_ja: titles[i] || `商品ID:${links[i].id}`,
-        price_jpy: prices[i],
-        url: `https://www.suruga-ya.jp${links[i].path}`,
-        image_url: images[i] || '',
-        condition: isUsed ? '中古' : '新品',
-        category: keyword,
-        source: 'surugaya',
-        scraped_at: new Date().toISOString(),
-      });
-    }
-  }
   return products;
 }
 
@@ -109,23 +110,21 @@ async function fetchHtml(targetUrl: string, usePremium = false, countryCode = 'j
 
 export async function scrapeSurugaya(keyword: string): Promise<SurugayaProduct[]> {
   const url = `https://www.suruga-ya.jp/search?category=&search_word=${encodeURIComponent(keyword)}&rankBy=new`;
-  // premium_proxy=true to bypass Cloudflare on suruga-ya.jp
-  const html = await fetchHtml(url, true);
+  const html = await fetchHtml(url, true, 'jp');
   return extractProducts(html, keyword);
 }
 
 export async function getEbaySoldPrice(query: string): Promise<number> {
-  const url = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1&LH_Complete=1&_ipg=40&LH_ItemCondition=3000`;
+  const url = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1&LH_Complete=1&_ipg=40`;
   let html: string;
   try {
-    html = await fetchHtml(url, false, 'us'); // eBay needs US IP
+    html = await fetchHtml(url, false, 'us');
   } catch {
     return 0;
   }
 
   const prices: number[] = [];
   let m: RegExpExecArray | null;
-  // Pattern: $XX.XX dollar amounts in the page
   const dollarPattern = /\$([\d,]+\.\d{2})/g;
   while ((m = dollarPattern.exec(html)) !== null) {
     const val = parseFloat(m[1].replace(/,/g, ''));
@@ -133,7 +132,7 @@ export async function getEbaySoldPrice(query: string): Promise<number> {
   }
   if (prices.length === 0) return 0;
   prices.sort((a, b) => a - b);
-  return prices[Math.floor(prices.length / 2)]; // median
+  return prices[Math.floor(prices.length / 2)];
 }
 
 export async function getExchangeRate(): Promise<number> {

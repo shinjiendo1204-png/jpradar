@@ -193,16 +193,16 @@ export default function ClarityPage() {
         <div className="max-w-5xl mx-auto flex justify-between items-center">
           <Link href="/" className="font-black text-lg">
             JP<span className="text-blue-600">RADAR</span>
-            <span className="ml-2 text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">J-Clarity</span>
+            <span className="ml-2 text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">StreamProof</span>
           </Link>
-          <Link href="/dashboard" className="text-slate-500 text-sm hover:text-slate-900">Dashboard</Link>
+
         </div>
       </nav>
 
       <div className="max-w-5xl mx-auto px-6 py-10">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
-          <h1 className="text-4xl font-black mb-2">J-Clarity</h1>
-          <p className="text-slate-500">Japan market intelligence for game developers.<br />Find the right JP streamers. Measure real ROI.</p>
+          <h1 className="text-4xl font-black mb-2">JP StreamProof</h1>
+          <p className="text-slate-500">Measure the <strong>true incremental impact</strong> of Japanese streamers.<br />Not views. Not followers. Actual sales evidence.</p>
         </motion.div>
 
         {/* Search */}
@@ -291,8 +291,18 @@ export default function ClarityPage() {
               ) : (
                 <div className="space-y-1">
                   {trending.slice(0, 8).map((game, i) => (
-                    <button key={i} onClick={() => { setSearchMode('game'); setQuery(game.game_name); }}
-                      className="w-full flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-slate-50 transition-colors text-left group">
+                    <button key={i} onClick={async () => {
+                        setQuery(game.game_name);
+                        setLoading(true);
+                        setResult(null);
+                        try {
+                          const res = await fetch(`/api/clarity/search?q=${encodeURIComponent(game.game_name)}`);
+                          const d = await res.json();
+                          if (d.results?.[0]) analyze(d.results[0]);
+                          else setLoading(false);
+                        } catch { setLoading(false); }
+                      }}
+                      className="w-full flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-orange-50 transition-colors text-left group">
                       <span className="text-slate-300 font-black text-xs w-5">#{game.rank}</span>
                       <div className="flex-1 min-w-0">
                         <div className="font-bold text-sm group-hover:text-orange-600 transition-colors truncate">{game.game_name}</div>

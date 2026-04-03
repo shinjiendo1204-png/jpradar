@@ -11,49 +11,51 @@ const PLANS = [
     id: "free",
     name: "Free",
     price: "$0",
-    period: "/month",
-    desc: "Test the waters",
+    period: "",
+    desc: "Explore the tool",
     features: [
-      "5 deal alerts/day",
-      "Email notifications",
-      "All categories",
-      "7-day deal history",
+      "5 game analyses/month",
+      "Lv.1 lift analysis",
+      "JP streamer rankings",
+      "Genre filters",
     ],
-    cta: "Current Plan",
+    cta: "Start Free",
     highlight: false,
     stripePlan: null,
   },
   {
-    id: "hunter",
-    name: "Hunter",
-    price: "$29",
+    id: "studio",
+    name: "Studio",
+    price: "$79",
     period: "/month",
-    desc: "For active flippers",
+    desc: "For indie studios",
     features: [
-      "Unlimited alerts",
-      "Slack & Discord webhooks",
-      "Category filters",
-      "Min profit threshold",
-      "30-day history",
+      "Unlimited game analyses",
+      "Lv.1 + Lv.2 analysis",
+      "Lag curve detection",
+      "Budget optimizer",
+      "Slack alerts",
+      "Export reports",
     ],
-    cta: "Upgrade to Hunter",
+    cta: "Start 7-day Trial",
     highlight: true,
     stripePlan: "hunter",
   },
   {
-    id: "pro",
-    name: "Pro",
-    price: "$79",
+    id: "publisher",
+    name: "Publisher",
+    price: "$299",
     period: "/month",
-    desc: "For serious resellers",
+    desc: "For publishers & agencies",
     features: [
-      "Everything in Hunter",
-      "Priority alerts (first to know)",
-      "Multiple webhooks",
-      "Profit analytics dashboard",
-      "CSV export",
+      "Everything in Studio",
+      "Lv.3 multi-factor analysis",
+      "Confidence interval reports",
+      "Multi-game tracking",
+      "API access",
+      "Priority support",
     ],
-    cta: "Upgrade to Pro",
+    cta: "Upgrade to Publisher",
     highlight: false,
     stripePlan: "pro",
   },
@@ -69,11 +71,7 @@ export default function PricingPage() {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
       if (user) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("plan")
-          .eq("id", user.id)
-          .single();
+        const { data } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
         if (data?.plan) setCurrentPlan(data.plan);
       }
     }

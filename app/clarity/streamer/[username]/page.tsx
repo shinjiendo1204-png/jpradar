@@ -57,9 +57,7 @@ interface StreamerData {
     }[];
   };
   cost_efficiency: {
-    estimated_cost_jpy: number;
     incremental_reviews_expected: number;
-    cost_per_incremental_review: number | null;
     strategic_recommendation: string;
     note: string;
   };
@@ -140,7 +138,7 @@ export default function StreamerPage() {
             <ArrowLeft size={16} /> Back
           </Link>
           <span className="text-slate-300">|</span>
-          <span className="font-black text-sm">JP<span className="text-blue-600">RADAR</span> · J-Clarity</span>
+          <span className="font-black text-sm">JP<span className="text-blue-600">RADAR</span> · StreamProof</span>
         </div>
       </nav>
 
@@ -331,11 +329,9 @@ export default function StreamerPage() {
                 </div>
                 <div className="bg-slate-50 rounded-xl p-3 text-center">
                   <div className="text-2xl font-black text-slate-700">
-                    {data.cost_efficiency.cost_per_incremental_review
-                      ? `¥${Math.round(data.cost_efficiency.cost_per_incremental_review / 1000)}k`
-                      : '—'}
+                    {data.incrementality.sample_size > 0 ? `${data.incrementality.sample_size} streams` : '—'}
                   </div>
-                  <div className="text-slate-500 text-xs">cost / incremental review</div>
+                  <div className="text-slate-500 text-xs">data points</div>
                 </div>
               </div>
 
@@ -365,11 +361,7 @@ export default function StreamerPage() {
             </>
           )}
 
-          {/* Cost */}
-          <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between text-sm text-slate-500">
-            <span><strong>Est. sponsorship:</strong> ¥{data.cost_efficiency.estimated_cost_jpy.toLocaleString()}</span>
-            <span className="text-xs text-slate-400">{data.cost_efficiency.note}</span>
-          </div>
+          <div className="mt-3 text-xs text-slate-400 italic">{data.cost_efficiency.note}</div>
         </div>
 
         {/* Recent broadcasts */}

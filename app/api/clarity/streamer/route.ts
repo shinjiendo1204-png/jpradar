@@ -220,14 +220,22 @@ export async function GET(req: NextRequest) {
       down: d.down,
     }));
 
-    // Calculate incrementality for each broadcast that has game content
-    const incrementalityResults = gameBroadcasts.slice(0, 10).map(b =>
-      calcIncrementality(
-        reviewTimeline,
-        { date: b.created_at, view_count: estimateAvgConcurrent(b.view_count), title: b.title, url: `https://www.twitch.tv/videos/${b.id}` },
-        1 // concurrent streamers (simplified)
-      )
-    );
+    // Use game broadcasts if available, otherwise use ALL recent broadcasts
+    // This ensures we always have data to analyze
+    const broadcastsForAnalysis = gameBroadcasts.length > 0
+      ? gameBroadcasts
+      : recentBroadcasts; // fallback: analyze all broadcasts vs steam timeline
+
+    // Calculate incrementality for each broadcast
+    const incrementalityResults = steamDaily.length > 0
+      ? broadcastsForAnalysis.slice(0, 10).map(b =>
+          calcIncrementality(
+            reviewTimeline,
+            { date: b.created_at, view_count: estimateAvgConcurrent(b.view_count), title: b.title, url: `https://www.twitch.tv/videos/${b.id}` },
+            1
+          )
+        )
+      : [];
 
     const aggregatedIncrementality = aggregateIncrementality(incrementalityResults);
 
@@ -288,13 +296,9 @@ export async function GET(req: NextRequest) {
           vs_baseline_label: r.vs_baseline_label,
         })),
       },
-      // Cost efficiency (replaces ROI framing)
+      // Cost efficiency (no price shown — rates vary widely)
       cost_efficiency: {
-        estimated_cost_jpy: estimatedCostJpy,
         incremental_reviews_expected: aggregatedIncrementality.avg_incremental,
-        cost_per_incremental_review: aggregatedIncrementality.avg_incremental > 0
-          ? Math.round(estimatedCostJpy / aggregatedIncrementality.avg_incremental)
-          : null,
         strategic_recommendation: aggregatedIncrementality.best_use,
         note: '* Incremental = reviews that would NOT have happened without this streamer',
       },

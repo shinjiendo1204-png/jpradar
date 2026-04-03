@@ -38,37 +38,53 @@ const DELTA = 0.30; // genre fit: moderate weight
 export function calcVFunction(input: VFunctionInput): VFunctionOutput {
   const { avg_view_count, clips_per_broadcast, review_delta_per_stream, genre_fit, peak_hour_bonus } = input;
 
-  // Normalize inputs to 0-100 scale before applying
-  const R = Math.min(avg_view_count / 1000, 100);           // 1000 viewers = 1.0 unit
-  const E = Math.min(clips_per_broadcast * 10, 100);         // 1 clip per stream = 10 units
-  const C = Math.min(review_delta_per_stream * 5, 100);      // 1 review per stream = 5 units
-  const Fit = Math.max(0, Math.min(genre_fit, 1));
+  /**
+   * Additive scoring model (0-100)
+   * J-Clarity value prop: a small streamer with high conversion
+   * can outrank a mega-streamer with zero conversion.
+   *
+   * Reach      (0-25): log scale — large audiences matter but have diminishing returns
+   * Engagement (0-25): clips/interaction per stream relative to audience
+   * Conversion (0-35): most important — actual Steam review delta evidence
+   * Fit        (0-15): genre alignment
+   */
 
-  const reachComp      = Math.pow(R + 1, ALPHA);
-  const engageComp     = Math.pow(E + 1, BETA);
-  const convertComp    = Math.pow(C + 0.1, GAMMA);  // ε = 0.1 to avoid zero
-  const fitComp        = Math.pow(Fit * 10 + 1, DELTA);
-  const timeBonus      = peak_hour_bonus;
+  // Reach: log10(viewers) * 7, capped at 25
+  // 100 viewers → 14,  1k → 21,  10k → 28→cap25,  100k → 35→cap25
+  const reachComp = Math.min(Math.log10(avg_view_count + 1) * 7, 25);
 
-  const rawScore = reachComp * engageComp * convertComp * fitComp * timeBonus;
+  // Engagement: clips relative to audience size (high rate = more engaged chat)
+  // 1 clip per 1k viewers = 10pts, scales up to 25
+  const engagementRate = avg_view_count > 0
+    ? (clips_per_broadcast / Math.max(avg_view_count / 1000, 0.1))
+    : 0;
+  const engageComp = Math.min(engagementRate * 10, 25);
 
-  // Normalize: log scale to prevent saturation
-  // At typical values (10k viewers, some engagement, some conversion): rawScore ~5-15
-  // At very high values (100k viewers): rawScore ~20-30
-  // Map to 0-100 with log curve
-  const v_score = Math.min(Math.round(Math.log10(rawScore + 1) * 55), 100);
+  // Conversion: actual evidence of purchase behavior (review delta)
+  // 1 review delta per stream = 5pts, scales to 35
+  const convertComp = Math.min(review_delta_per_stream * 5, 35);
 
-  // CBI: Chat Buy-Intent Index
-  // Higher engagement relative to viewers = higher buying intent
-  const engagementRate = avg_view_count > 0 ? clips_per_broadcast / (avg_view_count / 1000) : 0;
-  const conversionRate = avg_view_count > 0 ? review_delta_per_stream / (avg_view_count / 1000) : 0;
-  const cbi_index = Math.min(Math.round((engagementRate * 40 + conversionRate * 60)), 100);
+  // Fit: genre alignment
+  const fitComp = Math.min(genre_fit * 15, 15);
 
-  // Tier — calibrated for log-normalized score
+  const rawScore = reachComp + engageComp + convertComp + fitComp;
+  const timeAdjusted = rawScore * peak_hour_bonus;
+  const v_score = Math.min(Math.round(timeAdjusted), 100);
+
+  // CBI: Chat Buy-Intent Index — conversion efficiency relative to reach
+  const conversionRate = avg_view_count > 0
+    ? review_delta_per_stream / (avg_view_count / 1000)
+    : 0;
+  const cbi_index = Math.min(Math.round(
+    Math.min(engagementRate * 30, 50) +
+    Math.min(conversionRate * 50, 50)
+  ), 100);
+
+  // Tier
   const tier: VFunctionOutput['tier'] =
     v_score >= 65 ? 'S' :
-    v_score >= 48 ? 'A' :
-    v_score >= 32 ? 'B' : 'C';
+    v_score >= 45 ? 'A' :
+    v_score >= 25 ? 'B' : 'C';
 
   // Estimated purchases per stream
   // Base: avg_view_count × conversion_rate
